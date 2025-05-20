@@ -1,7 +1,8 @@
 
-- ubuntu template update and correct?
-- OPNSense template and network config?
-- tailscale in opnsense and separate??
-- Make sure we get the latest proxmox image and validate cert/signature
-- Same for Omada
-- Setup ansible for VM backups, logging, system recovery, removing VM templates, etc.
+- tailscale in opnsense and/or separate??
+- Validate image downloads cert/signature
+- Automatically get latest Ubuntu
+- Automatically get latest Omada
+- Automatically get latest zeek
+- Automatically get latest OPNSense
+- Setup ansible for log/metric offloading/rotation/trim, system recovery, removing VM templates, etc.

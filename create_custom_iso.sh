@@ -12,19 +12,23 @@ echo "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-su
 sudo wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
 
 sudo apt update
-sudo apt install -y whois proxmox-auto-install-assistant xorriso
+sudo apt install -y whois proxmox-auto-install-assistant xorriso curl
 
-# Download Proxmox ISO (if not already present)
-ISO_URL="https://download.proxmox.com/iso/proxmox-ve_8.4-1.iso"
+# Find latest Proxmox ISO
 ISO_NAME="proxmox-ve-custom.iso"
 TMP_DIR="/tmp/proxmox-iso"
-
 mkdir -p "$TMP_DIR"
+
+echo "Finding latest Proxmox VE ISO..."
+LATEST_ISO=$(curl -s https://download.proxmox.com/iso/ | grep -o 'proxmox-ve_[0-9]\+\.[0-9]\+-[0-9]\+\.iso' | sort -V | tail -n 1)
+ISO_URL="https://download.proxmox.com/iso/$LATEST_ISO"
+echo "Found latest version: $LATEST_ISO"
+
+# Download Proxmox ISO (if not already present)
 wget -nc "$ISO_URL" --no-check-certificate -O "$TMP_DIR/proxmox-original.iso"
 
 ROOT_HASHED_PASSWORD=$(mkpasswd $ROOT_PASSWORD)
 
-#TODO: root-ssh_keys = "$ROOT_SSH_KEYS" ?
 # Create answer.toml with thin LVM and .env secrets
 cat <<EOF > "$TMP_DIR/answer.toml"
 [global]

@@ -14,7 +14,7 @@ resource "proxmox_vm_qemu" "omada_controller" {
   
   disk {
     slot    = 0
-    size    = "20G"
+    size    = "10G"
     type    = "virtio"
     storage = "local-lvm"
   }

@@ -14,7 +14,7 @@ resource "proxmox_vm_qemu" "tailscale_vm" {
   
   disk {
     slot    = 0
-    size    = "10G"
+    size    = "5G"
     type    = "virtio"
     storage = "local-lvm"
   }

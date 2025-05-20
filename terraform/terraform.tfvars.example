@@ -1,0 +1,9 @@
+proxmox_host         = "10.1.50.1"  # Proxmox management IP
+proxmox_api_secret   = "your-api-secret-here"
+ssh_public_key       = "ssh-rsa AAAAB3NzaC1yc2E..."
+tailscale_auth_key   = "tskey-auth-xxxxx"
+omada_password       = "secure-password-for-omada"
+tailscale_password   = "secure-password-for-tailscale"
+timezone             = "America/Chicago"
+target_node          = "pve"
+network_prefix       = "10.1"  # Use 10.1 for Tennessee, 10.2 for Primary Home

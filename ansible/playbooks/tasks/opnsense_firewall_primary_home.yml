@@ -1,0 +1,434 @@
+---
+# Configure Primary Home OPNsense firewall rules
+
+# WAN rules
+- name: Configure WAN interface firewall rules
+  ansibleguy.opnsense.rule:
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    interface: "{{ item.interface }}"
+    protocol: "{{ item.protocol }}"
+    description: "{{ item.description }}"
+    action: "{{ item.action }}"
+    log: "{{ item.log | default(false) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    sequence: "{{ item.sequence }}"
+    state: present
+  loop:
+    - interface: wan
+      source: any
+      destination: any
+      protocol: "udp"
+      destination_port: "41641"
+      action: "pass"
+      description: "Allow Tailscale VPN traffic (WireGuard)"
+      sequence: 1
+      log: true
+    - interface: wan
+      source: any
+      destination: "10.2.50.2"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Omada Controller remote access (optional, restrict to VPN)"
+      sequence: 2
+      log: true
+    - interface: wan
+      source: any
+      destination: "10.2.10.10"
+      protocol: "tcp"
+      destination_port: "8123"
+      action: "pass"
+      description: "Home Assistant remote access (optional, prefer VPN)"
+      sequence: 3
+      log: true
+    - interface: wan
+      source: any
+      destination: "10.2.10.100"
+      protocol: "tcp"
+      destination_port: "445,2049"
+      action: "pass"
+      description: "NAS remote access (optional, prefer VPN)"
+      sequence: 4
+      log: true
+    - interface: wan
+      source: any
+      destination: any
+      action: "block"
+      description: "Default deny"
+      sequence: 5
+      log: true
+
+# VLAN 10 rules
+- name: Configure VLAN 10 (Main LAN) firewall rules
+  ansibleguy.opnsense.rule:
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    interface: "{{ item.interface }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    description: "{{ item.description }}"
+    action: "{{ item.action }}"
+    log: "{{ item.log | default(false) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    sequence: "{{ item.sequence }}"
+    state: present
+  loop:
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.10.100"
+      protocol: "tcp"
+      destination_port: "445,2049"
+      action: "pass"
+      description: "Local NAS access (SMB/NFS)"
+      sequence: 1
+      log: false
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.1.10.10"
+      protocol: "tcp"
+      destination_port: "8123"
+      action: "pass"
+      description: "Access Tennessee Home Assistant"
+      sequence: 2
+      log: true
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.50.2"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Local Omada Controller (HTTP/HTTPS)"
+      sequence: 3
+      log: false
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.50.2"
+      protocol: "udp"
+      destination_port: "27001"
+      action: "pass"
+      description: "Local Omada Controller (Discovery)"
+      sequence: 4
+      log: false
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.50.2"
+      protocol: "tcp"
+      destination_port: "29810-29814"
+      action: "pass"
+      description: "Local Omada Controller (Management)"
+      sequence: 5
+      log: false
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.1.50.2"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Tennessee Omada Controller (HTTP/HTTPS)"
+      sequence: 6
+      log: true
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.1.50.2"
+      protocol: "udp"
+      destination_port: "27001"
+      action: "pass"
+      description: "Tennessee Omada Controller (Discovery)"
+      sequence: 7
+      log: true
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.1.50.2"
+      protocol: "tcp"
+      destination_port: "29810-29814"
+      action: "pass"
+      description: "Tennessee Omada Controller (Management)"
+      sequence: 8
+      log: true
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: any
+      protocol: "tcp"
+      destination_port: "80,443"
+      action: "pass"
+      description: "Internet access (HTTP/HTTPS)"
+      sequence: 9
+      log: false
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.30.0/24"
+      action: "pass"
+      description: "Access IoT VLAN (e.g., for Home Assistant)"
+      sequence: 10
+      log: true
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.20.0/24"
+      action: "block"
+      description: "Block access to Camera VLAN"
+      sequence: 11
+      log: true
+    - interface: vlan10
+      source: "10.2.10.0/24"
+      destination: "10.2.40.0/24"
+      action: "block"
+      description: "Block access to Guest VLAN"
+      sequence: 12
+      log: true
+
+# VLAN 20 rules
+- name: Configure VLAN 20 (Cameras) firewall rules
+  ansibleguy.opnsense.rule:
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    interface: "{{ item.interface }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    description: "{{ item.description }}"
+    action: "{{ item.action }}"
+    log: "{{ item.log | default(false) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    sequence: "{{ item.sequence }}"
+    state: present
+  loop:
+    - interface: vlan20
+      source: "10.2.20.0/24"
+      destination: "10.2.20.3"
+      protocol: "tcp"
+      destination_port: "80,443,9000"
+      action: "pass"
+      description: "Camera to NVR (Reolink ports)"
+      sequence: 1
+      log: true
+    - interface: vlan20
+      source: "10.2.20.0/24"
+      destination: "10.2.50.2"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Deco management by Omada (HTTP/HTTPS)"
+      sequence: 2
+      log: true
+    - interface: vlan20
+      source: "10.2.20.0/24"
+      destination: "10.2.50.2"
+      protocol: "udp"
+      destination_port: "27001"
+      action: "pass"
+      description: "Deco management by Omada (Discovery)"
+      sequence: 3
+      log: false
+    - interface: vlan20
+      source: "10.2.20.0/24"
+      destination: "10.2.50.2"
+      protocol: "tcp"
+      destination_port: "29810-29814"
+      action: "pass"
+      description: "Deco management by Omada (Management)"
+      sequence: 4
+      log: false
+    - interface: vlan20
+      source: "10.2.10.10"
+      destination: "10.2.20.0/24"
+      protocol: "tcp"
+      destination_port: "80,443,9000"
+      action: "pass"
+      description: "Home Assistant camera integration"
+      sequence: 5
+      log: true
+    - interface: vlan20
+      source: "100.64.0.0/10"
+      destination: "10.2.20.3"
+      protocol: "tcp"
+      destination_port: "443"
+      action: "pass"
+      description: "Remote NVR access via Tailscale (Reolink app)"
+      sequence: 6
+      log: true
+    - interface: vlan20
+      source: "10.2.20.0/24"
+      destination: any
+      action: "block"
+      description: "Block all other traffic"
+      sequence: 7
+      log: true
+
+# VLAN 30 rules
+- name: Configure VLAN 30 (IoT) firewall rules
+  ansibleguy.opnsense.rule:
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    interface: "{{ item.interface }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    description: "{{ item.description }}"
+    action: "{{ item.action }}"
+    log: "{{ item.log | default(false) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    sequence: "{{ item.sequence }}"
+    state: present
+  loop:
+    - interface: vlan30
+      source: "10.2.30.0/24"
+      destination: "10.2.10.10"
+      action: "pass"
+      description: "IoT to Home Assistant"
+      sequence: 1
+      log: true
+    - interface: vlan30
+      source: "10.2.30.0/24"
+      destination: any
+      protocol: "tcp"
+      destination_port: "80,443"
+      action: "pass"
+      description: "IoT internet access (e.g., firmware updates)"
+      sequence: 2
+      log: false
+    - interface: vlan30
+      source: "10.2.30.0/24"
+      destination: any
+      action: "block"
+      description: "Block all other traffic"
+      sequence: 3
+      log: true
+
+# VLAN 40 rules
+- name: Configure VLAN 40 (Guest) firewall rules
+  ansibleguy.opnsense.rule:
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    interface: "{{ item.interface }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    description: "{{ item.description }}"
+    action: "{{ item.action }}"
+    log: "{{ item.log | default(false) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    sequence: "{{ item.sequence }}"
+    state: present
+  loop:
+    - interface: vlan40
+      source: "10.2.40.0/24"
+      destination: any
+      protocol: "tcp"
+      destination_port: "80,443"
+      action: "pass"
+      description: "Guest internet access"
+      sequence: 1
+      log: false
+    - interface: vlan40
+      source: "10.2.40.0/24"
+      destination: any
+      action: "block"
+      description: "Block all other traffic"
+      sequence: 2
+      log: true
+
+# VLAN 50 rules
+- name: Configure VLAN 50 (Management) firewall rules
+  ansibleguy.opnsense.rule:
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    interface: "{{ item.interface }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    description: "{{ item.description }}"
+    action: "{{ item.action }}"
+    log: "{{ item.log | default(false) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    sequence: "{{ item.sequence }}"
+    state: present
+  loop:
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.2.10.0/24"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Omada to local APs/Decos (HTTP/HTTPS)"
+      sequence: 1
+      log: false
+    - interface: vlan50
+      source: "10.2.50.2" 
+      destination: "10.2.10.0/24"
+      protocol: "udp"
+      destination_port: "27001"
+      action: "pass"
+      description: "Omada to local APs/Decos (Discovery)"
+      sequence: 2
+      log: false
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.2.10.0/24"
+      protocol: "tcp"
+      destination_port: "29810-29814"
+      action: "pass"
+      description: "Omada to local APs/Decos (Management)"
+      sequence: 3
+      log: false
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.2.20.0/24"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Omada to local Decos (HTTP/HTTPS)"
+      sequence: 4
+      log: false
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.2.20.0/24"
+      protocol: "udp"
+      destination_port: "27001"
+      action: "pass"
+      description: "Omada to local Decos (Discovery)"
+      sequence: 5
+      log: false
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.2.20.0/24"
+      protocol: "tcp"
+      destination_port: "29810-29814"
+      action: "pass"
+      description: "Omada to local Decos (Management)"
+      sequence: 6
+      log: false
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.1.10.0/24"
+      protocol: "tcp"
+      destination_port: "8088,8043,27001,29810-29814"
+      action: "pass"
+      description: "Omada to Tennessee APs/Decos"
+      sequence: 7
+      log: true
+    - interface: vlan50
+      source: "10.2.50.2"
+      destination: "10.1.20.0/24"
+      protocol: "tcp"
+      destination_port: "8088,8043,27001,29810-29814"
+      action: "pass"
+      description: "Omada to Tennessee Decos"
+      sequence: 8
+      log: true
+    - interface: vlan50
+      source: "10.2.10.0/24"
+      destination: "10.2.50.2"
+      protocol: "tcp"
+      destination_port: "8088,8043"
+      action: "pass"
+      description: "Local management of Omada"
+      sequence: 9
+      log: false
+    - interface: vlan50
+      source: "10.2.50.0/24"
+      destination: any
+      action: "block"
+      description: "Block all other traffic"
+      sequence: 10
+      log: true
+
+# Configure Tailscale
+- name: Configure Tailscale gateway
+  ansibleguy.opnsense.tailscale_general:
+    enabled: true
+    accept_routes: true
+    advertise_exit_node: true
+    advertise_routes: "10.2.0.0/16"
+    state: present 

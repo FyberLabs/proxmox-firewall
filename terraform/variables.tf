@@ -10,8 +10,14 @@ variable "proxmox_api_secret" {
 }
 
 variable "ssh_public_key" {
-  description = "SSH public key for VM access"
+  description = "SSH public key for VM access (from Proxmox root key)"
   type        = string
+}
+
+variable "ssh_private_key_file" {
+  description = "Path to SSH private key file for provisioning"
+  type        = string
+  default     = "~/.ssh/id_rsa"
 }
 
 variable "tailscale_auth_key" {

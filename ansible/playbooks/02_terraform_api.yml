@@ -40,11 +40,11 @@
         mode: '0600'
       when: api_token is defined
 
-    - name: Update .env file with API token
+    - name: Update location-specific API token in .env
       local_action:
         module: lineinfile
         path: "{{ playbook_dir }}/../.env"
-        regexp: "^PROXMOX_API_SECRET_{{ inventory_hostname | upper }}="
-        line: "PROXMOX_API_SECRET_{{ inventory_hostname | upper }}=\"{{ api_token }}\""
+        regexp: "^PROXMOX_API_SECRET_{{ location_prefix | upper }}_PROXMOX="
+        line: "PROXMOX_API_SECRET_{{ location_prefix | upper }}_PROXMOX=\"{{ api_token }}\""
         create: yes
       when: api_token is defined

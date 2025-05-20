@@ -1,31 +1,27 @@
 ---
 - name: Deploy VMs using Terraform
-  hosts: localhost
+  hosts: proxmox  # This will run on all Proxmox hosts
   tasks:
     - name: Ensure Terraform directory exists
+      delegate_to: localhost
       file:
         path: "{{ playbook_dir }}/../terraform"
         state: directory
         
-    - name: Create terraform.tfvars for each environment
+    - name: Create terraform.tfvars file with location-specific variables
+      delegate_to: localhost
       template:
         src: templates/terraform.tfvars.j2
-        dest: "{{ playbook_dir }}/../terraform/{{ item }}.tfvars"
-      loop:
-        - tennessee
-        - primary_home
+        dest: "{{ playbook_dir }}/../terraform/{{ inventory_hostname }}.tfvars"
       
     - name: Initialize Terraform
+      delegate_to: localhost
       shell: terraform init
       args:
         chdir: "{{ playbook_dir }}/../terraform"
         
-    - name: Deploy Tennessee environment
-      shell: terraform apply -var-file=tennessee.tfvars -auto-approve
-      args:
-        chdir: "{{ playbook_dir }}/../terraform"
-      
-    - name: Deploy Primary Home environment
-      shell: terraform apply -var-file=primary_home.tfvars -auto-approve
+    - name: Deploy VMs with Terraform for {{ inventory_hostname }}
+      delegate_to: localhost
+      shell: terraform apply -auto-approve -var-file={{ inventory_hostname }}.tfvars
       args:
         chdir: "{{ playbook_dir }}/../terraform"

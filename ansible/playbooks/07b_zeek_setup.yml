@@ -1,0 +1,337 @@
+---
+- name: Configure Zeek Network Security Monitor
+  hosts: zeek
+  become: true
+  vars:
+    zeek_version: "5.0.7"
+    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    network_prefix: "{{ '10.1' if 'tennessee' in group_names else '10.2' }}"
+    eth_interfaces:
+      - eth1  # WAN (fiber)
+      - eth2  # WAN2 (Starlink)
+    zeek_home: "/opt/zeek"
+    zeek_log_path: "/var/log/zeek"
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies
+      apt:
+        name:
+          - build-essential
+          - cmake
+          - make
+          - gcc
+          - g++
+          - flex
+          - bison
+          - libpcap-dev
+          - libssl-dev
+          - python3-dev
+          - swig
+          - zlib1g-dev
+          - git
+          - curl
+          - libmaxminddb-dev
+          - python3-pip
+          - jq
+          - ethtool
+          - tcpdump
+          - tshark
+        state: present
+
+    - name: Create Zeek log directory
+      file:
+        path: "{{ zeek_log_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Download Zeek
+      get_url:
+        url: "https://download.zeek.org/zeek-{{ zeek_version }}.tar.gz"
+        dest: "/tmp/zeek-{{ zeek_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract Zeek archive
+      unarchive:
+        src: "/tmp/zeek-{{ zeek_version }}.tar.gz"
+        dest: "/tmp/"
+        remote_src: yes
+
+    - name: Create Zeek install directory
+      file:
+        path: "{{ zeek_home }}"
+        state: directory
+        mode: '0755'
+
+    - name: Build and install Zeek
+      shell: |
+        cd /tmp/zeek-{{ zeek_version }}
+        ./configure --prefix={{ zeek_home }}
+        make -j $(nproc)
+        make install
+      args:
+        creates: "{{ zeek_home }}/bin/zeek"
+
+    - name: Add Zeek to PATH
+      copy:
+        content: |
+          export PATH=$PATH:{{ zeek_home }}/bin
+        dest: /etc/profile.d/zeek.sh
+        mode: '0644'
+
+    - name: Configure Zeek networks
+      copy:
+        content: |
+          # Internal networks for Zeek
+          redef Site::local_nets = {
+              {{ network_prefix }}.0.0/16,
+              10.0.0.0/8,
+              172.16.0.0/12,
+              192.168.0.0/16
+          };
+        dest: "{{ zeek_home }}/share/zeek/site/local.zeek"
+        mode: '0644'
+
+    - name: Configure Zeek node
+      copy:
+        content: |
+          [logger]
+          type=logger
+          host=localhost
+
+          [manager]
+          type=manager
+          host=localhost
+
+          [proxy-1]
+          type=proxy
+          host=localhost
+
+          [worker-1]
+          type=worker
+          host=localhost
+          interface=eth1
+          
+          [worker-2]
+          type=worker
+          host=localhost
+          interface=eth2
+        dest: "{{ zeek_home }}/etc/node.cfg"
+        mode: '0644'
+
+    - name: Configure Zeek to save logs in JSON format
+      copy:
+        content: |
+          @load policy/tuning/json-logs
+          @load frameworks/files/hash-all-files
+          @load frameworks/software/version-changes
+          @load frameworks/software/vulnerable
+          @load misc/detect-traceroute
+          @load misc/scan
+          @load misc/stats
+          @load-sigs frameworks/signatures/detect-windows-shells
+          @load protocols/ftp/software
+          @load protocols/smtp/software
+          @load protocols/ssh/software
+          @load protocols/http/software
+          @load protocols/dns/detect-external-names
+          @load policy/protocols/conn/vlan-logging
+          @load policy/protocols/conn/mac-logging
+          @load policy/protocols/ssl/validate-certs
+          @load policy/protocols/ssl/log-hostcerts-only
+          @load policy/protocols/http/var-extraction-cookies
+          @load policy/protocols/http/var-extraction-uri
+          
+          # Custom settings specific to our network
+          redef LogAscii::use_json = T;
+          
+          # Log suspicious activity
+          redef Notice::emailed_types += {
+              Scan::Port_Scan,
+              Scan::Address_Scan,
+              SSH::Password_Guessing,
+              HTTP::SQL_Injection_Attacker,
+              Weird::Activity
+          };
+        dest: "{{ zeek_home }}/share/zeek/site/local.zeek"
+        mode: '0644'
+        
+    # Install Zeek plugins for enhanced monitoring
+    - name: Install Ja3 Zeek plugin
+      git:
+        repo: https://github.com/salesforce/ja3.git
+        dest: /tmp/ja3
+        
+    - name: Install Ja3 plugin to Zeek
+      shell: |
+        cp /tmp/ja3/zeek/*.zeek {{ zeek_home }}/share/zeek/site/
+      args:
+        creates: "{{ zeek_home }}/share/zeek/site/ja3.zeek"
+
+    - name: Install Zeek community ID plugin
+      git:
+        repo: https://github.com/corelight/zeek-community-id.git
+        dest: /tmp/zeek-community-id
+
+    - name: Build and install community ID plugin
+      shell: |
+        cd /tmp/zeek-community-id
+        {{ zeek_home }}/bin/zkg install .
+      args:
+        creates: "{{ zeek_home }}/lib/zeek/plugins/Corelight_CommunityID"
+
+    - name: Deploy Zeek systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Zeek Network Security Monitor
+          After=network.target
+          
+          [Service]
+          Type=forking
+          ExecStart={{ zeek_home }}/bin/zeekctl start
+          ExecStop={{ zeek_home }}/bin/zeekctl stop
+          User=root
+          Group=root
+          Restart=on-failure
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/zeek.service
+        mode: '0644'
+
+    - name: Deploy log rotation for Zeek logs
+      copy:
+        content: |
+          {{ zeek_log_path }}/*.log {
+            daily
+            rotate 7
+            compress
+            missingok
+            notifempty
+            create 640 root root
+            sharedscripts
+            postrotate
+              if [ -f {{ zeek_home }}/var/run/zeekctl.pid ]; then
+                {{ zeek_home }}/bin/zeekctl cron
+              fi
+            endscript
+          }
+        dest: /etc/logrotate.d/zeek
+        mode: '0644'
+
+    - name: Deploy script to send alerts to OPNsense
+      copy:
+        content: |
+          #!/bin/bash
+          
+          # Send Zeek alerts to OPNsense syslog server
+          OPNSENSE_IP="{{ network_prefix }}.50.1"
+          
+          inotifywait -m -r -e modify --format '%w%f' {{ zeek_log_path }}/notice.log | while read FILE
+          do
+            if [[ "$FILE" == *"notice.log"* ]]; then
+              ALERT=$(tail -n 1 "$FILE" | jq -r '.note, .msg, .src, .dst, .ts' | tr '\n' ',' | sed 's/,$//')
+              logger -n $OPNSENSE_IP -P 514 -t "zeek" "ALERT: $ALERT"
+            fi
+          done
+        dest: /usr/local/bin/zeek-alert-forwarder.sh
+        mode: '0755'
+
+    - name: Install inotify-tools for alert forwarding
+      apt:
+        name: inotify-tools
+        state: present
+
+    - name: Deploy alert forwarder service
+      copy:
+        content: |
+          [Unit]
+          Description=Zeek Alert Forwarder
+          After=zeek.service
+          
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/zeek-alert-forwarder.sh
+          User=root
+          Group=root
+          Restart=on-failure
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/zeek-alerts.service
+        mode: '0644'
+
+    - name: Deploy Zeek web dashboard
+      copy:
+        content: |
+          #!/bin/bash
+          
+          # Simple HTTP server to view Zeek logs
+          cd {{ zeek_log_path }}
+          python3 -m http.server 8888
+        dest: /usr/local/bin/zeek-dashboard.sh
+        mode: '0755'
+
+    - name: Deploy Zeek dashboard service
+      copy:
+        content: |
+          [Unit]
+          Description=Zeek Web Dashboard
+          After=zeek.service
+          
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/zeek-dashboard.sh
+          User=root
+          Group=root
+          Restart=on-failure
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/zeek-dashboard.service
+        mode: '0644'
+
+    - name: Initialize Zeek
+      shell: |
+        {{ zeek_home }}/bin/zeekctl deploy
+      args:
+        creates: "{{ zeek_home }}/spool/installed-scripts-do-not-touch/site/local.zeek"
+
+    - name: Enable and start Zeek service
+      systemd:
+        name: zeek
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Enable and start alert forwarder
+      systemd:
+        name: zeek-alerts
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Enable and start Zeek dashboard
+      systemd:
+        name: zeek-dashboard
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Add access rule to OPNsense for Zeek dashboard
+      delegate_to: "{{ 'tn-opnsense' if 'tennessee' in group_names else 'ph-opnsense' }}"
+      ansibleguy.opnsense.rule:
+        source: "{{ network_prefix }}.10.0/24"
+        destination: "{{ network_prefix }}.50.4"
+        interface: "vlan10"
+        protocol: "tcp"
+        destination_port: "8888"
+        description: "Allow access to Zeek dashboard"
+        action: "pass"
+        sequence: 100
+        state: present 

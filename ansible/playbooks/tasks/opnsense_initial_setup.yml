@@ -1,0 +1,65 @@
+---
+# Configure OPNsense initial setup, API access, and credentials
+
+- name: Create OPNsense API key and secret
+  shell: |
+    echo '{{ opnsense_api_key | default("ansible") }}' > /tmp/api_key
+    echo '{{ opnsense_api_secret | default((lookup("password", "/dev/null chars=ascii_letters,digits length=32"))) }}' > /tmp/api_secret
+    chmod 600 /tmp/api_key /tmp/api_secret
+    cp /tmp/api_key /conf/api_key
+    cp /tmp/api_secret /conf/api_secret
+    
+    # Enable API
+    sed -i '' -e 's/\(.*<enable>.*\)0\(.*<\/enable>\)/\11\2/g' /conf/config.xml
+    
+    # Allow API key authentication for remote access
+    sed -i '' -e 's/\(.*<authmode>.*\)local\(.*<\/authmode>\)/\1api_key\2/g' /conf/config.xml
+    
+    # Save the configuration
+    /usr/local/etc/rc.d/configd restart
+    /usr/local/opnsense/scripts/filter/apply_config.php
+    
+    cat /conf/api_key
+    cat /conf/api_secret
+  register: api_result
+  changed_when: true
+  args:
+    executable: /bin/sh
+
+- name: Record OPNsense API credentials
+  delegate_to: localhost
+  become: false
+  copy:
+    content: |
+      export {{ location_prefix }}_OPNSENSE_API_KEY="{{ api_result.stdout_lines[0] | default('undefined') }}"
+      export {{ location_prefix }}_OPNSENSE_API_SECRET="{{ api_result.stdout_lines[1] | default('undefined') }}"
+    dest: "{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_opnsense_api.env"
+    mode: "0600"
+
+- name: Update .env file with OPNsense API credentials
+  delegate_to: localhost
+  become: false
+  lineinfile:
+    path: "{{ playbook_dir }}/../../.env"
+    regexp: "^{{ location_prefix }}_OPNSENSE_API_KEY="
+    line: "{{ location_prefix }}_OPNSENSE_API_KEY=\"{{ api_result.stdout_lines[0] | default('undefined') }}\""
+    state: present
+  
+- name: Update .env file with OPNsense API secret
+  delegate_to: localhost
+  become: false
+  lineinfile:
+    path: "{{ playbook_dir }}/../../.env"
+    regexp: "^{{ location_prefix }}_OPNSENSE_API_SECRET="
+    line: "{{ location_prefix }}_OPNSENSE_API_SECRET=\"{{ api_result.stdout_lines[1] | default('undefined') }}\""
+    state: present
+
+- name: Install required OPNsense packages
+  ansibleguy.opnsense.package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - os-tailscale
+    - os-theme-vicuna
+    - os-wireguard
+  ignore_errors: true 

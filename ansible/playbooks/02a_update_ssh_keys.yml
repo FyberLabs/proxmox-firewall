@@ -4,7 +4,7 @@
   become: true
   vars:
     # Path to authorized keys file in the repo
-    repo_keys_file: "{{ playbook_dir }}/../ssh_authorized_keys"
+    repo_keys_file: "{{ ssh_keys_file }}"
     
   pre_tasks:
     - name: Check if repo keys file exists
@@ -13,9 +13,9 @@
       register: repo_keys
       delegate_to: localhost
       
-    - name: Check if local SSH key exists
+    - name: Check if configured SSH key exists
       stat:
-        path: "~/.ssh/id_rsa.pub"
+        path: "{{ ansible_ssh_private_key_file }}.pub"
       register: local_key
       delegate_to: localhost
       
@@ -23,7 +23,7 @@
       fail:
         msg: >
           No SSH keys found. Either create '{{ repo_keys_file }}' with your public keys
-          or ensure '~/.ssh/id_rsa.pub' exists. SSH keys are required to prevent lockout.
+          or ensure '{{ ansible_ssh_private_key_file }}.pub' exists. SSH keys are required to prevent lockout.
       when: not repo_keys.stat.exists and not local_key.stat.exists
       
     - name: Initialize SSH keys list
@@ -36,9 +36,9 @@
       loop: "{{ lookup('file', repo_keys_file).splitlines() }}"
       when: repo_keys.stat.exists and item | trim != ''
       
-    - name: Add local key as fallback
+    - name: Add configured key as fallback
       set_fact:
-        ssh_keys: "{{ ssh_keys + [ { 'name': 'local_key', 'state': 'present', 'key': lookup('file', '~/.ssh/id_rsa.pub') } ] }}"
+        ssh_keys: "{{ ssh_keys + [ { 'name': 'ansible_key', 'state': 'present', 'key': lookup('file', ansible_ssh_private_key_file + '.pub') } ] }}"
       when: not repo_keys.stat.exists and local_key.stat.exists
       
     - name: Show keys to be authorized

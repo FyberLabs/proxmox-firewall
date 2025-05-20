@@ -39,3 +39,11 @@
         src: /root/.ssh/id_rsa.pub
         dest: "{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_root.pub"
         flat: yes
+
+    - name: Update TF_VAR_ssh_public_key in .env
+      local_action:
+        module: lineinfile
+        path: "{{ playbook_dir }}/../.env"
+        regexp: "^TF_VAR_ssh_public_key="
+        line: "TF_VAR_ssh_public_key=\"{{ lookup('file', playbook_dir + '/../credentials/' + inventory_hostname + '_root.pub') }}\""
+      when: inventory_hostname == ansible_play_batch[0]  # Only for first host

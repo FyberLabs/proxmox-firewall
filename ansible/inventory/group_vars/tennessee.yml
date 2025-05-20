@@ -1,11 +1,15 @@
 ---
 # Tennessee-specific variables
-network_prefix: "10.1"
-proxmox_mgmt_ip: "10.1.50.1/24"
-proxmox_mgmt_gw: "10.1.50.1"
+network_prefix: "{{ lookup('env', 'TN_NETWORK_PREFIX') }}"
+proxmox_mgmt_ip: "{{ lookup('env', 'TN_PROXMOX_HOST') }}"
+proxmox_mgmt_gw: "{{ lookup('env', 'TN_PROXMOX_HOST') }}"  # Same as host in this setup
 
-# Interface mappings (adjust based on actual hardware)
-lan_interface: "enp1s0"      # 10G SFP+ for LAN
-wan_interface: "enp2s0"      # 2.5G for Fiber
-camera_interface: "enp3s0"   # 10G SFP+ for Cameras
-starlink_interface: "enp4s0" # 2.5G for Starlink
+# Interface mappings from environment
+lan_interface: "{{ lookup('env', 'TN_LAN_INTERFACE') }}"
+wan_interface: "{{ lookup('env', 'TN_WAN_INTERFACE') }}"
+camera_interface: "{{ lookup('env', 'TN_CAMERA_INTERFACE') }}"
+starlink_interface: "{{ lookup('env', 'TN_STARLINK_INTERFACE') }}"
+
+# Location identifier
+location: "tennessee"
+location_prefix: "tn"

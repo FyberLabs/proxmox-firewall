@@ -1,0 +1,159 @@
+---
+# Configure Primary Home OPNsense interfaces (10.2.x.x/16)
+
+- name: Configure physical interfaces
+  ansibleguy.opnsense.interface:
+    name: "{{ item.name }}"
+    device: "{{ item.device }}"
+    descr: "{{ item.descr }}"
+    enable: true
+  loop:
+    - name: lan
+      device: vtnet0
+      descr: "LAN Interface (10G SFP+)"
+    - name: wan
+      device: vtnet1
+      descr: "WAN Interface - Fiber (2.5G)"
+    - name: opt1
+      device: vtnet2
+      descr: "Camera Interface (10G SFP+)"
+    - name: opt2
+      device: vtnet3
+      descr: "WAN Failover - Starlink (2.5G)"
+    - name: pxmg
+      device: vtnet4
+      descr: "Proxmox Management (2.5G)"
+
+# Configure VLANs
+- name: Configure VLANs
+  ansibleguy.opnsense.vlan:
+    device: "{{ item.device }}"
+    tag: "{{ item.tag }}"
+    descr: "{{ item.descr }}"
+    enable: true
+  loop:
+    - device: lan
+      tag: 10
+      descr: "VLAN10 - Main LAN (10.2.10.0/24)"
+    - device: lan
+      tag: 30
+      descr: "VLAN30 - IoT (10.2.30.0/24)"
+    - device: lan
+      tag: 40
+      descr: "VLAN40 - Guest (10.2.40.0/24)"
+    - device: lan
+      tag: 50
+      descr: "VLAN50 - Management (10.2.50.0/24)"
+    - device: opt1
+      tag: 20
+      descr: "VLAN20 - Cameras (10.2.20.0/24)"
+
+# Configure interface IPs
+- name: Configure interface IP assignments
+  ansibleguy.opnsense.interface_ip:
+    interface: "{{ item.interface }}"
+    type: "{{ item.type }}"
+    ipv4_address: "{{ item.ipv4_address | default(omit) }}"
+    ipv4_prefixlen: "{{ item.ipv4_prefixlen | default(omit) }}"
+    apply: true
+  loop:
+    - interface: lan
+      type: none
+    - interface: wan
+      type: dhcp
+    - interface: opt1
+      type: none
+    - interface: opt2
+      type: dhcp
+    - interface: pxmg  
+      type: static
+      ipv4_address: "10.2.50.1"
+      ipv4_prefixlen: 24
+    - interface: vlan10
+      type: static
+      ipv4_address: "10.2.10.1"
+      ipv4_prefixlen: 24
+    - interface: vlan20
+      type: static
+      ipv4_address: "10.2.20.1" 
+      ipv4_prefixlen: 24
+    - interface: vlan30
+      type: static
+      ipv4_address: "10.2.30.1"
+      ipv4_prefixlen: 24
+    - interface: vlan40
+      type: static
+      ipv4_address: "10.2.40.1"
+      ipv4_prefixlen: 24
+    - interface: vlan50
+      type: static
+      ipv4_address: "10.2.50.254"
+      ipv4_prefixlen: 24
+
+# Configure DHCP servers for each VLAN
+- name: Configure DHCP servers
+  ansibleguy.opnsense.dhcp_subnet:
+    interface: "{{ item.interface }}"
+    enabled: true
+    range_from: "{{ item.range_from }}"
+    range_to: "{{ item.range_to }}"
+    gateway: "{{ item.gateway }}"
+    domain: "ph.local"
+    dns_servers: ["10.2.10.1"]
+  loop:
+    - interface: vlan10
+      range_from: "10.2.10.100"
+      range_to: "10.2.10.254"
+      gateway: "10.2.10.1"
+    - interface: vlan20
+      range_from: "10.2.20.10"
+      range_to: "10.2.20.254"
+      gateway: "10.2.20.1"
+    - interface: vlan30
+      range_from: "10.2.30.100"
+      range_to: "10.2.30.254"
+      gateway: "10.2.30.1"
+    - interface: vlan40
+      range_from: "10.2.40.100"
+      range_to: "10.2.40.254"
+      gateway: "10.2.40.1"
+    - interface: vlan50
+      range_from: "10.2.50.100"
+      range_to: "10.2.50.253"
+      gateway: "10.2.50.254"
+
+# Configure DHCP static mappings
+- name: Configure DHCP static mappings
+  ansibleguy.opnsense.dhcp_reservation:
+    interface: "{{ item.interface }}"
+    mac: "{{ item.mac }}"
+    ip: "{{ item.ip }}"
+    hostname: "{{ item.hostname }}"
+    descr: "{{ item.descr }}"
+    state: present
+  loop:
+    - interface: vlan10
+      mac: "{{ lookup('env', 'PH_HOME_ASSISTANT_MAC') }}"
+      ip: "10.2.10.10"
+      hostname: "home-assistant"
+      descr: "Home Assistant"
+    - interface: vlan10
+      mac: "{{ lookup('env', 'PH_NAS_MAC') }}"
+      ip: "10.2.10.100"
+      hostname: "nas"
+      descr: "NAS"
+    - interface: vlan50
+      mac: "{{ lookup('env', 'PH_OMADA_MAC') }}"
+      ip: "10.2.50.2"
+      hostname: "omada"
+      descr: "Omada Controller"
+    - interface: vlan20
+      mac: "{{ lookup('env', 'PH_REOLINK_HUB_MAC') }}"
+      ip: "10.2.20.2"
+      hostname: "reolink-hub"
+      descr: "Reolink Pro Hub"
+    - interface: vlan20
+      mac: "{{ lookup('env', 'PH_NVR_MAC') }}"
+      ip: "10.2.20.3"
+      hostname: "nvr"
+      descr: "NVR" 

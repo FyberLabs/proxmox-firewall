@@ -1,0 +1,18 @@
+---
+- name: Configure {{ bridge_name }} bridge in interfaces file
+  blockinfile:
+    path: /etc/network/interfaces
+    block: |
+      # {{ bridge_comment }}
+      auto {{ bridge_name }}
+      {% if use_dhcp | default(false) %}
+      iface {{ bridge_name }} inet dhcp
+      {% else %}
+      iface {{ bridge_name }} inet static
+        address {{ bridge_address }}
+      {% endif %}
+        bridge-ports {{ physical_interface }}
+        bridge-stp off
+        bridge-fd 0
+    marker: "# {mark} ANSIBLE MANAGED BLOCK {{ bridge_name }}"
+  notify: restart networking

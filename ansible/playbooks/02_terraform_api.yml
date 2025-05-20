@@ -1,0 +1,50 @@
+---
+- name: Set up Terraform API Access
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Create Terraform role
+      shell: >
+        pveum role add TerraformProv -privs "Datastore.AllocateSpace Datastore.AllocateTemplate Datastore.Audit 
+        Pool.Allocate Sys.Audit Sys.Console Sys.Modify VM.Allocate VM.Audit VM.Clone VM.Config.CDROM 
+        VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network 
+        VM.Config.Options VM.Migrate VM.Monitor VM.PowerMgmt SDN.Use"
+      register: role_result
+      failed_when: role_result.rc != 0 and "already exists" not in role_result.stderr
+
+    - name: Create Terraform user
+      shell: pveum user add tfuser@pve --password "{{ lookup('password', '{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_tfuser_password chars=ascii_letters,digits length=20') }}"
+      register: user_result
+      failed_when: user_result.rc != 0 and "already exists" not in user_result.stderr
+
+    - name: Assign role to user
+      shell: pveum aclmod / -user tfuser@pve -role TerraformProv
+      register: acl_result
+      failed_when: acl_result.rc != 0 and "already exists" not in acl_result.stderr
+
+    - name: Create API token
+      shell: pveum user token add tfuser@pve terraform --privsep 0
+      register: token_output
+      failed_when: token_output.rc != 0 and "already exists" not in token_output.stderr
+
+    - name: Extract API token
+      set_fact:
+        api_token: "{{ token_output.stdout | regex_search('value:\\s+([^\\s]+)', '\\1') | first }}"
+      when: token_output.stdout is defined and token_output.stdout | length > 0
+
+    - name: Save API token to local file
+      local_action:
+        module: copy
+        content: "{{ api_token }}"
+        dest: "{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_api_token.txt"
+        mode: '0600'
+      when: api_token is defined
+
+    - name: Update .env file with API token
+      local_action:
+        module: lineinfile
+        path: "{{ playbook_dir }}/../.env"
+        regexp: "^PROXMOX_API_SECRET_{{ inventory_hostname | upper }}="
+        line: "PROXMOX_API_SECRET_{{ inventory_hostname | upper }}=\"{{ api_token }}\""
+        create: yes
+      when: api_token is defined

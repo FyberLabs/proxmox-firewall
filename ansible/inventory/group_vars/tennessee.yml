@@ -1,0 +1,11 @@
+---
+# Tennessee-specific variables
+network_prefix: "10.1"
+proxmox_mgmt_ip: "10.1.50.1/24"
+proxmox_mgmt_gw: "10.1.50.1"
+
+# Interface mappings (adjust based on actual hardware)
+lan_interface: "enp1s0"      # 10G SFP+ for LAN
+wan_interface: "enp2s0"      # 2.5G for Fiber
+camera_interface: "enp3s0"   # 10G SFP+ for Cameras
+starlink_interface: "enp4s0" # 2.5G for Starlink

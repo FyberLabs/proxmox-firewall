@@ -1,7 +1,8 @@
-- ssh in and get API key
-- setup bridges in proxmox
-- make templates for ubuntu and OPNSense
-- if ssh key file exists, use it as root and terraform keys
+
+- ubuntu template update and correct?
+- OPNSense template and network config?
+- specific ssh key file to add
 - Make sure we get the latest proxmox image and validate cert/signature
 - Same for Omada
-- Setup ansible for VM backups, logging, system recovery, etc.
+- Setup ansible for VM backups, logging, system recovery, removing VM templates, etc.
+- we need all the vars assignable in example env

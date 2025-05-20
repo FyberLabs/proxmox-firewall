@@ -1,0 +1,63 @@
+---
+- name: Configure Proxmox Network
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Backup interfaces file
+      copy:
+        src: /etc/network/interfaces
+        dest: /etc/network/interfaces.bak
+        remote_src: yes
+        
+    - name: Configure main management interface
+      template:
+        src: templates/interfaces.j2
+        dest: /etc/network/interfaces
+      notify: restart networking
+        
+    # Create bridge configurations for each interface
+    - name: Configure LAN bridge (vmbr0)
+      include_role:
+        name: proxmox_network
+        tasks_from: create_bridge
+      vars:
+        bridge_name: vmbr0
+        physical_interface: "{{ lan_interface }}"
+        bridge_address: "{{ network_prefix }}.50.1/24"
+        bridge_comment: "LAN Bridge"
+        
+    - name: Configure WAN bridge (vmbr1)
+      include_role:
+        name: proxmox_network
+        tasks_from: create_bridge
+      vars:
+        bridge_name: vmbr1
+        physical_interface: "{{ wan_interface }}"
+        bridge_comment: "WAN Bridge (Fiber)"
+        use_dhcp: true
+        
+    - name: Configure Camera bridge (vmbr2)
+      include_role:
+        name: proxmox_network
+        tasks_from: create_bridge
+      vars:
+        bridge_name: vmbr2
+        physical_interface: "{{ camera_interface }}"
+        bridge_address: "{{ network_prefix }}.20.1/24"
+        bridge_comment: "Camera Bridge"
+        
+    - name: Configure Starlink bridge (vmbr3)
+      include_role:
+        name: proxmox_network
+        tasks_from: create_bridge
+      vars:
+        bridge_name: vmbr3
+        physical_interface: "{{ starlink_interface }}"
+        bridge_comment: "Starlink Bridge (Failover WAN)"
+        use_dhcp: true
+        
+  handlers:
+    - name: restart networking
+      service:
+        name: networking
+        state: restarted

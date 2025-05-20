@@ -1,0 +1,17 @@
+---
+# Common variables for all Proxmox hosts
+ansible_ssh_private_key_file: ~/.ssh/id_rsa
+timezone: "America/Chicago"
+
+# Network defaults
+proxmox_management_vlan: 50
+
+# VM Template IDs
+ubuntu_template_id: 9001
+opnsense_template_id: 9000
+
+# Storage configuration
+storage_pool: local-lvm
+
+# SSH keys for VMs
+ssh_public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"

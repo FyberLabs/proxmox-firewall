@@ -1,0 +1,41 @@
+---
+- name: Initial Proxmox Setup
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Set timezone
+      timezone:
+        name: "{{ timezone }}"
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - python3-pip
+          - python3-proxmoxer
+          - qemu-guest-agent
+          - zfsutils-linux
+          - ifupdown2
+        state: present
+        update_cache: yes
+
+    - name: Generate SSH key for root
+      openssh_keypair:
+        path: /root/.ssh/id_rsa
+        type: rsa
+        size: 4096
+        state: present
+        
+    - name: Store root public key
+      fetch:
+        src: /root/.ssh/id_rsa.pub
+        dest: "{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_root.pub"
+        flat: yes

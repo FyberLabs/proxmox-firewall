@@ -1,0 +1,80 @@
+---
+- name: Master Playbook for Proxmox Firewall Deployment
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Display deployment banner
+      debug:
+        msg: 
+          - "==================================================="
+          - "Proxmox Firewall Deployment - Master Playbook"
+          - "==================================================="
+          - "This playbook will run the following stages:"
+          - "1. Configure Proxmox repositories (no subscription)"
+          - "2. Perform initial Proxmox system setup"
+          - "3. Configure Terraform API access"
+          - "4. Set up network bridges and VLANs"
+          - "5. Create VM templates (Ubuntu, OPNsense)"
+          - "6. Deploy VMs with Terraform"
+          - "==================================================="
+      tags: always
+
+    - name: Create credentials directory
+      file:
+        path: "{{ playbook_dir }}/../credentials"
+        state: directory
+        mode: '0700'
+      tags: always
+
+    - name: Ensure .env file exists
+      copy:
+        content: |
+          # Proxmox Secrets
+          ROOT_PASSWORD="your_secure_password"
+          ADMIN_EMAIL="admin@example.com"
+          # API keys will be added automatically by playbooks
+        dest: "{{ playbook_dir }}/../.env"
+        force: no
+        mode: '0600'
+      tags: always
+
+    - name: Stage 1 - Configure Proxmox repositories
+      import_playbook: playbooks/00_configure_repos.yml
+      tags: [stage1, repos]
+
+    - name: Stage 2 - Perform initial Proxmox setup
+      import_playbook: playbooks/01_initial_setup.yml
+      tags: [stage2, setup]
+
+    - name: Stage 3 - Configure Terraform API access
+      import_playbook: playbooks/02_terraform_api.yml
+      tags: [stage3, api]
+
+    - name: Stage 4 - Set up network bridges
+      import_playbook: playbooks/03_network_setup.yml
+      tags: [stage4, network]
+
+    - name: Stage 5 - Create VM templates
+      import_playbook: playbooks/04_vm_templates.yml
+      tags: [stage5, templates]
+
+    - name: Stage 6 - Deploy VMs with Terraform
+      import_playbook: playbooks/05_deploy_vms.yml
+      tags: [stage6, deploy]
+
+    - name: Deployment summary
+      debug:
+        msg:
+          - "==================================================="
+          - "Deployment Complete!"
+          - "==================================================="
+          - "API credentials have been saved to: {{ playbook_dir }}/../credentials/"
+          - "Main services deployed:"
+          - "  - OPNsense firewall"
+          - "  - Omada Controller ({{ item.prefix }}.50.2)"
+          - "  - Tailscale VM ({{ item.prefix }}.50.3)"
+          - "==================================================="
+      loop:
+        - { location: "Tennessee", prefix: "10.1" }
+        - { location: "Primary Home", prefix: "10.2" }
+      tags: always

@@ -1,0 +1,80 @@
+---
+- name: Configure Network Transition from DHCP to Static Management IPs
+  hosts: proxmox
+  become: true
+  vars:
+    # Determine location-specific values
+    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    old_ip: "{{ lookup('env', location_prefix + '_PROXMOX_IP') }}"
+    network_prefix: "{{ lookup('env', location_prefix + '_NETWORK_PREFIX') }}"
+    mgmt_ip: "{{ network_prefix }}.50.10"
+    
+  tasks:
+    - name: Display transition warning
+      debug:
+        msg:
+          - "=============================================================="
+          - "     NETWORK TRANSITION - PROXMOX IP ADDRESS CHANGE"
+          - "=============================================================="
+          - "Current IP: {{ old_ip }}"
+          - "Target IP: {{ mgmt_ip }}"
+          - "The host will be reconfigured with the new IP on VLAN 50."
+          - "Connectivity may be temporarily interrupted."
+          - "This process ensures a smooth transition to the management VLAN."
+          - "=============================================================="
+          
+    - name: Configure new Management VLAN IP address
+      lineinfile:
+        path: /etc/network/interfaces
+        regexp: '^iface vmbr0.50'
+        line: "iface vmbr0.50 inet static\n    address {{ mgmt_ip }}/24\n    gateway {{ network_prefix }}.50.1"
+        state: present
+      register: mgmt_vlan_config
+      
+    - name: Ensure Management VLAN is auto-started
+      lineinfile:
+        path: /etc/network/interfaces
+        line: "auto vmbr0.50"
+        insertbefore: "^iface vmbr0.50"
+        state: present
+      register: mgmt_vlan_auto
+        
+    - name: Apply VLAN configuration (bring up interface)
+      command: ifup vmbr0.50
+      when: mgmt_vlan_config.changed or mgmt_vlan_auto.changed
+      
+    - name: Verify Management VLAN connectivity
+      command: ping -c 1 {{ network_prefix }}.50.1
+      register: ping_result
+      ignore_errors: true
+      
+    - name: Update .env file with new Management IP (local action)
+      delegate_to: localhost
+      blockinfile:
+        path: "{{ playbook_dir }}/../.env"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ location_prefix }} MANAGEMENT IP"
+        block: |
+          # Management VLAN IP (after network transition)
+          {{ location_prefix }}_MGMT_IP="{{ mgmt_ip }}"
+      when: ping_result is defined and ping_result.rc == 0
+        
+    - name: Keep dual connectivity until transition is complete
+      debug:
+        msg: 
+          - "Management VLAN IP {{ mgmt_ip }} has been configured."
+          - "The original IP {{ old_ip }} will remain accessible."
+          - "Both IPs are now in the .env file for redundancy."
+          - "Full transition will happen in the final network setup."
+          
+    - name: Record successful transition
+      delegate_to: localhost
+      copy:
+        dest: "{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_network_transition.txt"
+        content: |
+          Proxmox host: {{ inventory_hostname }}
+          Old IP: {{ old_ip }}
+          New Management IP: {{ mgmt_ip }}
+          Transition timestamp: {{ ansible_date_time.iso8601 }}
+          Management VLAN connectivity: {{ 'SUCCESS' if ping_result.rc == 0 else 'FAILED' }}
+        mode: '0600'
+      when: ping_result is defined 

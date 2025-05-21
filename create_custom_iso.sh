@@ -12,7 +12,13 @@ echo "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-su
 sudo wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
 
 sudo apt update
-sudo apt install -y whois proxmox-auto-install-assistant xorriso curl
+sudo apt install -y whois proxmox-auto-install-assistant xorriso curl pipx
+
+#Local install of ansible and ansible-dev-tools
+pipx ensurepath
+pipx install --include-deps ansible
+pipx install ansible-dev-tools ansible-lint
+
 
 # Find latest Proxmox ISO
 ISO_NAME="proxmox-ve-custom.iso"

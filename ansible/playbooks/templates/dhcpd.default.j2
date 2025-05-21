@@ -1,0 +1,13 @@
+# Default settings for the DHCP server on {{ inventory_hostname }}
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+# Path to dhcpd.leases file
+DHCPD_CONF=/etc/dhcp/dhcpd.conf
+DHCPD_PID=/var/run/dhcpd.pid
+
+# Interfaces to listen on
+INTERFACESv4="{{ interfaces | join(' ') }}"
+INTERFACESv6=""
+
+# Additional options
+OPTIONS="" 

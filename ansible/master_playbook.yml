@@ -13,7 +13,7 @@
           - "1. Configure Proxmox repositories (no subscription)"
           - "2. Perform initial Proxmox system setup"
           - "3. Configure Terraform API access"
-          - "4. Set up network bridges and VLANs"
+          - "4. Set up network transition and bridges"
           - "5. Create VM templates (Ubuntu, OPNsense)"
           - "6. Deploy VMs with Terraform"
           - "7. Configure OPNsense firewalls with Tailscale"
@@ -55,6 +55,10 @@
     - name: Include Terraform API Setup playbook
       import_playbook: playbooks/02_terraform_api.yml
       tags: ['api', 'terraform']
+
+    - name: Include Network Transition playbook
+      import_playbook: playbooks/03a_network_transition.yml
+      tags: ['network', 'transition']
 
     - name: Include Network Setup playbook
       import_playbook: playbooks/03_network_setup.yml
@@ -101,6 +105,7 @@
           - "  - OPNsense firewall with Tailscale: {{ item.prefix }}.50.1"
           - "  - Omada Controller: {{ item.prefix }}.50.2"
           - "  - Zeek Security Monitor: {{ item.prefix }}.50.4"
+          - "  - Proxmox Management: {{ item.prefix }}.50.10"
           - "Security monitoring URLs:"
           - "  - OPNsense Suricata: https://{{ item.prefix }}.50.1/ui/ids"
           - "  - OPNsense Tailscale: https://{{ item.prefix }}.50.1/ui/tailscale"

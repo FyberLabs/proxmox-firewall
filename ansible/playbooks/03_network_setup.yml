@@ -1,63 +1,212 @@
 ---
-- name: Configure Proxmox Network
+- name: Configure Network Bridges and VLANs
   hosts: proxmox
   become: true
+  vars:
+    # Determine location-specific values
+    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    initial_ip: "{{ lookup('env', location_prefix + '_PROXMOX_IP') }}"
+    mgmt_ip: "{{ lookup('env', location_prefix + '_MGMT_IP') | default(network_prefix + '.50.10') }}"
+    network_prefix: "{{ lookup('env', location_prefix + '_NETWORK_PREFIX') }}"
+    lan_interface: "{{ lookup('env', location_prefix + '_LAN_INTERFACE') }}"
+    wan_interface: "{{ lookup('env', location_prefix + '_WAN_INTERFACE') }}"
+    camera_interface: "{{ lookup('env', location_prefix + '_CAMERA_INTERFACE') }}"
+    starlink_interface: "{{ lookup('env', location_prefix + '_STARLINK_INTERFACE') }}"
+    
+    # Define VLAN configuration
+    vlans:
+      - id: 10
+        name: "main-lan"
+        description: "Main LAN"
+        subnet: "{{ network_prefix }}.10.0/24"
+        enable_dhcp: true
+        dhcp_start: "{{ network_prefix }}.10.100"
+        dhcp_end: "{{ network_prefix }}.10.200"
+      - id: 20
+        name: "cameras"
+        description: "Camera Network"
+        subnet: "{{ network_prefix }}.20.0/24"
+        enable_dhcp: true
+        dhcp_start: "{{ network_prefix }}.20.100"
+        dhcp_end: "{{ network_prefix }}.20.200"
+      - id: 30
+        name: "iot"
+        description: "IoT Devices"
+        subnet: "{{ network_prefix }}.30.0/24"
+        enable_dhcp: true
+        dhcp_start: "{{ network_prefix }}.30.100"
+        dhcp_end: "{{ network_prefix }}.30.200"
+      - id: 40
+        name: "guest"
+        description: "Guest Network"
+        subnet: "{{ network_prefix }}.40.0/24"
+        enable_dhcp: true
+        dhcp_start: "{{ network_prefix }}.40.100"
+        dhcp_end: "{{ network_prefix }}.40.200"
+      - id: 50
+        name: "management"
+        description: "Management Network"
+        subnet: "{{ network_prefix }}.50.0/24"
+        enable_dhcp: true
+        dhcp_start: "{{ network_prefix }}.50.100"
+        dhcp_end: "{{ network_prefix }}.50.200"
+    
   tasks:
-    - name: Backup interfaces file
-      copy:
-        src: /etc/network/interfaces
-        dest: /etc/network/interfaces.bak
-        remote_src: yes
+    - name: Check if transition has succeeded
+      stat:
+        path: "/sys/class/net/vmbr0.50"
+      register: mgmt_vlan_status
+    
+    - name: Display network setup banner
+      debug:
+        msg: 
+          - "========================================================"
+          - "Setting up Network Bridges and VLANs for {{ inventory_hostname }}"
+          - "========================================================"
+          - "Network prefix: {{ network_prefix }}"
+          - "LAN interface: {{ lan_interface }}"
+          - "WAN interfaces: {{ wan_interface }} (Fiber), {{ starlink_interface }} (Starlink)"
+          - "Camera interface: {{ camera_interface }}"
+          - "Management IP: {{ mgmt_ip }}"
+          - "Initial IP (kept for transition): {{ initial_ip }}"
+          - "========================================================"
+    
+    # Configure network bridges
+    - name: Set up vmbr0 - LAN bridge (10G SFP+)
+      lineinfile:
+        path: /etc/network/interfaces
+        regexp: '^auto vmbr0|^iface vmbr0'
+        line: "auto vmbr0\niface vmbr0 inet manual\n    bridge-ports {{ lan_interface }}\n    bridge-stp off\n    bridge-fd 0\n    bridge-vlan-aware yes"
+        state: present
+        insertafter: EOF
+      register: vmbr0_config
+    
+    - name: Set up vmbr1 - WAN bridge (Fiber - 2.5G)
+      lineinfile:
+        path: /etc/network/interfaces
+        regexp: '^auto vmbr1|^iface vmbr1'
+        line: "auto vmbr1\niface vmbr1 inet manual\n    bridge-ports {{ wan_interface }}\n    bridge-stp off\n    bridge-fd 0"
+        state: present
+        insertafter: EOF
+      register: vmbr1_config
+    
+    - name: Set up vmbr2 - Camera bridge (10G SFP+)
+      lineinfile:
+        path: /etc/network/interfaces
+        regexp: '^auto vmbr2|^iface vmbr2'
+        line: "auto vmbr2\niface vmbr2 inet manual\n    bridge-ports {{ camera_interface }}\n    bridge-stp off\n    bridge-fd 0\n    bridge-vlan-aware yes"
+        state: present
+        insertafter: EOF
+      register: vmbr2_config
+    
+    - name: Set up vmbr3 - Starlink WAN bridge (2.5G)
+      lineinfile:
+        path: /etc/network/interfaces
+        regexp: '^auto vmbr3|^iface vmbr3'
+        line: "auto vmbr3\niface vmbr3 inet manual\n    bridge-ports {{ starlink_interface }}\n    bridge-stp off\n    bridge-fd 0"
+        state: present
+        insertafter: EOF
+      register: vmbr3_config
+    
+    # Configure VLAN interfaces for Management VLAN (if not already done in transition)
+    - name: Set up Management VLAN interface (if not already configured)
+      lineinfile:
+        path: /etc/network/interfaces
+        regexp: '^auto vmbr0.50|^iface vmbr0.50'
+        line: "auto vmbr0.50\niface vmbr0.50 inet static\n    address {{ mgmt_ip }}/24\n    gateway {{ network_prefix }}.50.1\n    vlan-id 50\n    vlan-raw-device vmbr0"
+        state: present
+        insertafter: EOF
+      when: not mgmt_vlan_status.stat.exists
+      register: mgmt_vlan
+      
+    # Configure interfaces for DHCP services
+    - name: Install DHCP server
+      apt:
+        name: isc-dhcp-server
+        state: present
         
-    - name: Configure main management interface
+    - name: Configure DHCP server
       template:
-        src: templates/interfaces.j2
-        dest: /etc/network/interfaces
-      notify: restart networking
-        
-    # Create bridge configurations for each interface
-    - name: Configure LAN bridge (vmbr0)
-      include_role:
-        name: proxmox_network
-        tasks_from: create_bridge
+        src: "{{ playbook_dir }}/templates/dhcpd.conf.j2"
+        dest: /etc/dhcp/dhcpd.conf
+        mode: '0644'
+      register: dhcp_config
+      
+    - name: Create subnet configuration for VLANs
+      template:
+        src: "{{ playbook_dir }}/templates/subnet.conf.j2"
+        dest: "/etc/dhcp/subnet-{{ item.id }}.conf"
+        mode: '0644'
+      with_items: "{{ vlans }}"
+      when: item.enable_dhcp | bool
+      register: subnet_configs
+    
+    - name: Include subnet configurations in main config
+      lineinfile:
+        path: /etc/dhcp/dhcpd.conf
+        line: "include \"/etc/dhcp/subnet-{{ item.id }}.conf\";"
+        insertafter: "^# Subnet configurations"
+      with_items: "{{ vlans }}"
+      when: item.enable_dhcp | bool
+    
+    - name: Configure DHCP interfaces
+      template:
+        src: "{{ playbook_dir }}/templates/dhcpd.default.j2"
+        dest: /etc/default/isc-dhcp-server
+        mode: '0644'
       vars:
-        bridge_name: vmbr0
-        physical_interface: "{{ lan_interface }}"
-        bridge_address: "{{ network_prefix }}.50.1/24"
-        bridge_comment: "LAN Bridge"
-        
-    - name: Configure WAN bridge (vmbr1)
-      include_role:
-        name: proxmox_network
-        tasks_from: create_bridge
-      vars:
-        bridge_name: vmbr1
-        physical_interface: "{{ wan_interface }}"
-        bridge_comment: "WAN Bridge (Fiber)"
-        use_dhcp: true
-        
-    - name: Configure Camera bridge (vmbr2)
-      include_role:
-        name: proxmox_network
-        tasks_from: create_bridge
-      vars:
-        bridge_name: vmbr2
-        physical_interface: "{{ camera_interface }}"
-        bridge_address: "{{ network_prefix }}.20.1/24"
-        bridge_comment: "Camera Bridge"
-        
-    - name: Configure Starlink bridge (vmbr3)
-      include_role:
-        name: proxmox_network
-        tasks_from: create_bridge
-      vars:
-        bridge_name: vmbr3
-        physical_interface: "{{ starlink_interface }}"
-        bridge_comment: "Starlink Bridge (Failover WAN)"
-        use_dhcp: true
-        
-  handlers:
-    - name: restart networking
+        interfaces:
+          - "vmbr0.10"
+          - "vmbr0.20"
+          - "vmbr0.30"
+          - "vmbr0.40"
+          - "vmbr0.50"
+          - "vmbr2.20"
+      register: dhcp_interfaces
+    
+    # Create directories for network and DHCP leases
+    - name: Ensure DHCP lease directory exists
+      file:
+        path: /var/lib/dhcp
+        state: directory
+        mode: '0755'
+    
+    # Restart networking and DHCP services
+    - name: Restart networking
       service:
         name: networking
         state: restarted
+      when: vmbr0_config.changed or vmbr1_config.changed or vmbr2_config.changed or vmbr3_config.changed or mgmt_vlan.changed
+      ignore_errors: true
+      
+    - name: Enable and restart DHCP server
+      service:
+        name: isc-dhcp-server
+        state: restarted
+        enabled: yes
+      when: dhcp_config.changed or subnet_configs.changed or dhcp_interfaces.changed
+      
+    - name: Verify management network connectivity
+      command: ping -c 1 {{ network_prefix }}.50.1
+      register: management_ping
+      ignore_errors: true
+      changed_when: false
+      
+    - name: Finalize IP transition
+      debug:
+        msg:
+          - "Network configuration complete"
+          - "Management IP {{ mgmt_ip }} is {{ 'REACHABLE' if management_ping.rc == 0 else 'NOT REACHABLE' }}"
+          - "Original IP {{ initial_ip }} is still accessible for redundancy"
+          - "Once deployment is complete, you can remove the original IP from /etc/network/interfaces"
+    
+    - name: Update inventory file with both IPs
+      delegate_to: localhost
+      blockinfile:
+        path: "{{ playbook_dir }}/../credentials/host_ips.txt"
+        create: yes
+        marker: "# {mark} {{ inventory_hostname }} IP ADDRESSES"
+        block: |
+          {{ inventory_hostname }} initial_ip={{ initial_ip }}
+          {{ inventory_hostname }} mgmt_ip={{ mgmt_ip }}
+        mode: '0600'

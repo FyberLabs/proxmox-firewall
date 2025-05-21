@@ -1,0 +1,13 @@
+# DHCP Server Configuration for {{ inventory_hostname }}
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+# Global parameters
+option domain-name "{{ location_prefix | lower }}.home.arpa";
+option domain-name-servers {{ network_prefix }}.50.1;
+default-lease-time 7200;  # 2 hours
+max-lease-time 86400;     # 24 hours
+authoritative;
+log-facility local7;
+
+# Subnet configurations
+# Individual subnet configurations will be included here 

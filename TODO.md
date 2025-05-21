@@ -1,3 +1,5 @@
+# TODO
+
 - IP for proxmox needs to be dhcp to initialize then static in 10. net (implemented, needs testing)
 - We should provide dhcp for all local VLANs
 - Validate image downloads cert/signature

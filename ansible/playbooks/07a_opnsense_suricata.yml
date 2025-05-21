@@ -64,17 +64,32 @@
         action: "alert"
         rules: |
           # Detect password brute force attempts
-          alert tcp any any -> {{ network_prefix }}.0.0/16 22 (msg:"SSH brute force attempt"; flow:to_server; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:10000001; rev:1;)
-          alert tcp any any -> {{ network_prefix }}.0.0/16 3389 (msg:"RDP brute force attempt"; flow:to_server; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:10000002; rev:1;)
+          alert tcp any any -> {{ network_prefix }}.0.0/16 22 \
+            (msg:"SSH brute force attempt"; flow:to_server; \
+            threshold: type threshold, track by_src, count 5, seconds 60; \
+            classtype:attempted-admin; sid:10000001; rev:1;)
+          alert tcp any any -> {{ network_prefix }}.0.0/16 3389 \
+            (msg:"RDP brute force attempt"; flow:to_server; \
+            threshold: type threshold, track by_src, count 5, seconds 60; \
+            classtype:attempted-admin; sid:10000002; rev:1;)
 
           # Alert on known malicious traffic
-          alert tcp any any -> {{ network_prefix }}.0.0/16 any (msg:"Possible C&C traffic detected"; flow:to_server,established; content:"POST"; http_method; content:"/gate.php"; http_uri; classtype:trojan-activity; sid:10000003; rev:1;)
+          alert tcp any any -> {{ network_prefix }}.0.0/16 any \
+            (msg:"Possible C&C traffic detected"; flow:to_server,established; \
+            content:"POST"; http_method; content:"/gate.php"; http_uri; \
+            classtype:trojan-activity; sid:10000003; rev:1;)
 
           # Alert on suspicious outbound connections
-          alert tcp {{ network_prefix }}.0.0/16 any -> any 6667 (msg:"IRC traffic detected - possible bot"; flow:to_server,established; classtype:policy-violation; sid:10000004; rev:1;)
+          alert tcp {{ network_prefix }}.0.0/16 any -> any 6667 \
+            (msg:"IRC traffic detected - possible bot"; flow:to_server,established; \
+            classtype:policy-violation; sid:10000004; rev:1;)
 
           # Alert on potential data exfiltration
-          alert tcp {{ network_prefix }}.0.0/16 any -> any any (msg:"Large outbound file transfer"; flow:to_server,established; byte_test:>500000,>,0,relative; threshold: type threshold, track by_src, count 3, seconds 300; classtype:suspicious-filename-detect; sid:10000005; rev:1;)
+          alert tcp {{ network_prefix }}.0.0/16 any -> any any \
+            (msg:"Large outbound file transfer"; flow:to_server,established; \
+            byte_test:>500000,>,0,relative; \
+            threshold: type threshold, track by_src, count 3, seconds 300; \
+            classtype:suspicious-filename-detect; sid:10000005; rev:1;)
 
     - name: Configure IDS anomaly detection settings
       ansibleguy.opnsense.ids_action:

@@ -345,7 +345,7 @@
       sequence: 1
       log: false
     - interface: vlan50
-      source: "10.2.50.2" 
+      source: "10.2.50.2"
       destination: "10.2.10.0/24"
       protocol: "udp"
       destination_port: "27001"
@@ -431,4 +431,4 @@
     accept_routes: true
     advertise_exit_node: true
     advertise_routes: "10.2.0.0/16"
-    state: present 
+    state: present

@@ -15,6 +15,80 @@
 - Proxmox ISOs: [Download](https://www.proxmox.com/en/downloads/proxmox-virtual-environment/iso)
 - Modify Proxmox VE ISO with /etc/pve/datacenter.cfg
 
+### Detailed Installation Process
+
+1. **Create Custom Proxmox ISO**:
+
+   ```bash
+   # Clone the repository
+   git clone https://github.com/yourusername/proxmox-firewall.git
+   cd proxmox-firewall
+
+   # Set execution permissions
+   chmod +x scripts/create_custom_iso.sh
+
+   # Run the script to create custom ISO
+   ./scripts/create_custom_iso.sh
+   ```
+
+   This script downloads the official Proxmox ISO and modifies it with an answer file for automated installation.
+
+2. **Write ISO to USB Drive**:
+
+   ```bash
+   # Identify your USB drive (be careful with this step!)
+   lsblk
+
+   # Write ISO to USB (replace sdX with your USB device, e.g., sdc)
+   sudo dd if=proxmox-custom.iso of=/dev/sdX bs=4M status=progress conv=fsync
+   ```
+
+   ⚠️ **WARNING**: Double-check your USB device name. Using the wrong device can destroy data!
+
+3. **Install Proxmox**:
+   - Connect the USB drive to your server
+   - Boot from the USB drive (you may need to change boot priority in BIOS)
+   - The installation will proceed automatically with our preset configurations
+   - Once complete, the server will reboot
+
+4. **Network Configuration**:
+   - Connect an Ethernet cable to one of the NICs (preferably the first one)
+   - The server will acquire an IP address via DHCP
+   - You can find the IP address by:
+     - Checking your router's DHCP client list
+     - Looking at the Proxmox console display, which shows the IP address
+     - Using `arp-scan` or `nmap` from another computer on the network
+
+5. **Run Initial Ansible Setup**:
+
+   ```bash
+   # From your control machine (laptop/desktop)
+   cd proxmox-firewall
+
+   # Create a .env file with the server IP
+   echo "PROXMOX_HOST=<your-proxmox-ip>" > .env
+   echo "ANSIBLE_SSH_PRIVATE_KEY_FILE=~/.ssh/id_rsa" >> .env
+
+   # Ensure you have an SSH key
+   ssh-keygen -t rsa -b 4096 # if you don't already have one
+
+   # Create the authorized_keys file in the repo
+   cp ~/.ssh/id_rsa.pub ssh_authorized_keys
+
+   # Run the initial setup playbook (uses root password initially)
+   ansible-playbook ansible/playbooks/00_configure_repos.yml -k -u root
+
+   # Run the full deployment
+   ansible-playbook ansible/master_playbook.yml
+   ```
+
+6. **Access the Proxmox Web Interface**:
+   - Open a browser and navigate to `https://<your-proxmox-ip>:8006`
+   - Login with the default credentials (unless changed in your answer file):
+     - Username: `root`
+     - Password: `proxmox`
+   - Change the default password immediately after first login
+
 ### Tasks
 
 - Create Proxmox ISO with answer file
@@ -486,7 +560,7 @@ When Ansible runs, these key relationships are maintained:
 - Proxmox keys → Terraform → VMs
 
 **Important:** Before running `02b_disable_root_password.
-yml` to disable password authentication, ensure your SSH 
+yml` to disable password authentication, ensure your SSH
 keys are properly set up to prevent lockouts.
 
 ### Network Configuration

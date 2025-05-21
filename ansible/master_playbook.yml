@@ -16,7 +16,7 @@
           - "4. Set up network bridges and VLANs"
           - "5. Create VM templates (Ubuntu, OPNsense)"
           - "6. Deploy VMs with Terraform"
-          - "7. Configure OPNsense firewalls"
+          - "7. Configure OPNsense firewalls with Tailscale"
           - "8. Set up security monitoring (Suricata, Zeek)"
           - "==================================================="
       tags: always
@@ -72,6 +72,10 @@
       import_playbook: playbooks/06_opnsense_setup.yml
       tags: ['opnsense', 'firewall']
       
+    - name: Include Tailscale Integration playbook
+      import_playbook: playbooks/07c_opnsense_tailscale.yml
+      tags: ['opnsense', 'tailscale', 'network']
+      
     - name: Include Suricata IDS/IPS Setup playbook
       import_playbook: playbooks/07a_opnsense_suricata.yml
       tags: ['security', 'suricata']
@@ -94,12 +98,12 @@
           - "==================================================="
           - "API credentials have been saved to: {{ playbook_dir }}/../credentials/"
           - "Main services deployed:"
-          - "  - OPNsense firewall: {{ item.prefix }}.50.1"
+          - "  - OPNsense firewall with Tailscale: {{ item.prefix }}.50.1"
           - "  - Omada Controller: {{ item.prefix }}.50.2"
-          - "  - Tailscale VM: {{ item.prefix }}.50.3"
           - "  - Zeek Security Monitor: {{ item.prefix }}.50.4"
           - "Security monitoring URLs:"
           - "  - OPNsense Suricata: https://{{ item.prefix }}.50.1/ui/ids"
+          - "  - OPNsense Tailscale: https://{{ item.prefix }}.50.1/ui/tailscale"
           - "  - Zeek Dashboard: http://{{ item.prefix }}.50.4:8888"
           - "==================================================="
       loop:

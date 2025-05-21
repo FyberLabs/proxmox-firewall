@@ -1,0 +1,225 @@
+---
+- name: Configure Tailscale on OPNsense Firewalls
+  hosts: opnsense
+  gather_facts: false
+  vars:
+    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    network_prefix: "{{ '10.1' if 'tennessee' in group_names else '10.2' }}"
+    tailscale_auth_key: "{{ lookup('env', 'TF_VAR_tailscale_auth_key') }}"
+    opnsense_ip: "{{ lookup('env', location_prefix + '_OPNSENSE_IP') }}"
+    opnsense_api_key: "{{ lookup('env', location_prefix + '_OPNSENSE_API_KEY') }}"
+    opnsense_api_secret: "{{ lookup('env', location_prefix + '_OPNSENSE_API_SECRET') }}"
+    advertised_routes:
+      TN: "10.1.0.0/16"
+      PH: "10.2.0.0/16"
+    
+  tasks:
+    - name: Check if Tailscale Auth Key is set
+      fail:
+        msg: "Tailscale Auth Key (TF_VAR_tailscale_auth_key) is not set in your .env file"
+      when: tailscale_auth_key is not defined or tailscale_auth_key == ""
+      
+    - name: Check if OPNsense API credentials are set
+      fail:
+        msg: "OPNsense API credentials ({{ location_prefix }}_OPNSENSE_API_KEY and {{ location_prefix }}_OPNSENSE_API_SECRET) are not set in your .env file"
+      when: opnsense_api_key is not defined or opnsense_api_key == "" or opnsense_api_secret is not defined or opnsense_api_secret == ""
+
+    - name: Install os-tailscale plugin
+      uri:
+        url: "https://{{ opnsense_ip }}/api/core/firmware/install/os-tailscale"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 201, 202]
+        headers:
+          Content-Type: "application/json"
+      register: plugin_install_result
+      failed_when: false
+      
+    - name: Wait for plugin installation to complete
+      pause:
+        seconds: 10
+        
+    - name: Configure Tailscale Service
+      uri:
+        url: "https://{{ opnsense_ip }}/api/tailscale/service/set"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          service:
+            enabled: "1"
+            auth_key: "{{ tailscale_auth_key }}"
+            advertise_routes: "{{ advertised_routes[location_prefix] }}"
+            accept_routes: "1"
+            hostname: "opnsense-{{ location_prefix | lower }}"
+            advertise_exit_node: "0"  # We don't want to advertise as an exit node by default
+            exit_node_allow: "1"      # But allow using other exit nodes
+            use_exit_node: "0"        # Don't use an exit node by default
+            up_flags: "--advertise-routes={{ advertised_routes[location_prefix] }} --accept-routes"
+            interfacemap: "internal:vlan10"  # Map internal interface to VLAN 10
+        status_code: [200, 201, 202]
+      register: tailscale_config
+      
+    - name: Enable Tailscale Service
+      uri:
+        url: "https://{{ opnsense_ip }}/api/tailscale/service/reconfigure"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 201, 202]
+      register: tailscale_enable
+      
+    - name: Add Firewall Rules for Tailscale
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          rule:
+            enabled: "1"
+            action: "pass"
+            interface: "wan"  # Apply to WAN interfaces
+            ipprotocol: "inet"
+            protocol: "udp"
+            source: "any"
+            destination: "any:41641"  # Tailscale WireGuard port
+            description: "Allow Tailscale WireGuard"
+            log: "0"  # Don't log for performance
+        status_code: [200, 201, 202]
+      register: tailscale_fw_rule
+      
+    - name: Apply Firewall Changes
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/apply"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 201, 202]
+      register: apply_fw
+      
+    # Add Firewall ACLs for cross-site access
+    - name: Add ACL Rules for Cross-Site Access (VLAN 10 - Main LAN)
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          rule:
+            enabled: "1"
+            action: "pass"
+            interface: "lan"  # VLAN10 interface
+            ipprotocol: "inet"
+            protocol: "any"
+            source: "{{ network_prefix }}.10.0/24"  # Local Main LAN
+            destination: "{{ '10.2.10.0/24' if network_prefix == '10.1' else '10.1.10.0/24' }}"  # Remote Main LAN
+            description: "Allow Cross-Site Main LAN Access via Tailscale"
+        status_code: [200, 201, 202]
+      register: cross_site_lan_rule
+      
+    # Allow cross-site NAS access (Primary Home to/from Tennessee)
+    - name: Add ACL Rules for NAS Access
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          rule:
+            enabled: "1"
+            action: "pass"
+            interface: "lan"
+            ipprotocol: "inet"
+            protocol: "tcp"
+            source: "{{ '10.1.10.0/24' if network_prefix == '10.2' else network_prefix }}.10.0/24"
+            destination: "{{ '10.2.10.100' if network_prefix == '10.1' else network_prefix }}.10.100:445,2049"
+            description: "Allow NAS Access (SMB/NFS) via Tailscale"
+        status_code: [200, 201, 202]
+      register: nas_access_rule
+      when: network_prefix == "10.1" or (network_prefix == "10.2" and lookup('env', 'PH_NAS_IP', default='') != '')
+      
+    # Allow cross-site Home Assistant access
+    - name: Add ACL Rules for Home Assistant Access
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          rule:
+            enabled: "1"
+            action: "pass"
+            interface: "lan"
+            ipprotocol: "inet"
+            protocol: "tcp"
+            source: "{{ network_prefix }}.10.0/24"
+            destination: "{{ '10.2.10.10' if network_prefix == '10.1' else '10.1.10.10' }}:8123"
+            description: "Allow Home Assistant Access via Tailscale"
+        status_code: [200, 201, 202]
+      register: homeassistant_access_rule
+      
+    # Allow Management VLAN cross-site access for Omada Controllers
+    - name: Add ACL Rules for Omada Cross-Site Management
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          rule:
+            enabled: "1"
+            action: "pass"
+            interface: "opt1"  # Management VLAN interface
+            ipprotocol: "inet"
+            protocol: "tcp/udp"
+            source: "{{ network_prefix }}.50.2"  # Local Omada Controller
+            destination: "{{ '10.2' if network_prefix == '10.1' else '10.1' }}.0.0/16"  # All subnets in other location
+            description: "Allow Omada Controller Cross-Site Management"
+        status_code: [200, 201, 202]
+      register: omada_mgmt_rule
+      
+    - name: Apply Firewall Changes Again
+      uri:
+        url: "https://{{ opnsense_ip }}/api/firewall/filter/apply"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 201, 202]
+      register: apply_fw_again
+      
+    - name: Display Tailscale Status
+      debug:
+        msg:
+          - "Tailscale has been configured on OPNsense at {{ opnsense_ip }}"
+          - "Advertising routes: {{ advertised_routes[location_prefix] }}"
+          - "Hostname: opnsense-{{ location_prefix | lower }}"
+          - "Firewall rules have been added to allow Tailscale connectivity"
+          - "Cross-site access has been configured for Main LAN, NAS, and Home Assistant" 

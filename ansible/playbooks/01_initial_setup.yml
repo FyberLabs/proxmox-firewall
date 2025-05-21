@@ -4,20 +4,20 @@
   become: true
   tasks:
     - name: Set hostname
-      hostname:
+      ansible.builtin.hostname:
         name: "{{ inventory_hostname }}"
 
     - name: Set timezone
-      timezone:
-        name: "{{ timezone }}"
+      ansible.builtin.command: timedatectl set-timezone {{ timezone }}
+      changed_when: false
 
     - name: Update apt cache
-      apt:
-        update_cache: yes
+      ansible.builtin.apt:
+        update_cache: true
         cache_valid_time: 3600
 
     - name: Install required packages
-      apt:
+      ansible.builtin.apt:
         name:
           - python3-pip
           - python3-proxmoxer
@@ -25,25 +25,23 @@
           - zfsutils-linux
           - ifupdown2
         state: present
-        update_cache: yes
+        update_cache: true
 
     - name: Generate SSH key for root
-      openssh_keypair:
-        path: /root/.ssh/id_rsa
-        type: rsa
-        size: 4096
-        state: present
-        
+      ansible.builtin.command: ssh-keygen -t rsa -b 4096 -f /root/.ssh/id_rsa -N ""
+      args:
+        creates: /root/.ssh/id_rsa
+
     - name: Store root public key
-      fetch:
+      ansible.builtin.fetch:
         src: /root/.ssh/id_rsa.pub
         dest: "{{ playbook_dir }}/../credentials/{{ inventory_hostname }}_root.pub"
-        flat: yes
+        flat: true
 
     - name: Update TF_VAR_ssh_public_key in .env
-      local_action:
-        module: lineinfile
+      ansible.builtin.lineinfile:
         path: "{{ playbook_dir }}/../.env"
         regexp: "^TF_VAR_ssh_public_key="
         line: "TF_VAR_ssh_public_key=\"{{ lookup('file', playbook_dir + '/../credentials/' + inventory_hostname + '_root.pub') }}\""
+      delegate_to: localhost
       when: inventory_hostname == ansible_play_batch[0]  # Only for first host

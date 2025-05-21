@@ -4,17 +4,17 @@
   become: true
   tasks:
     - name: Create Ubuntu template for Omada/Tailscale
-      include_role:
+      ansible.builtin.include_role:
         name: vm_templates
         tasks_from: ubuntu_cloud
       vars:
-        template_id: "{{ ubuntu_template_id }}"
-        template_name: "ubuntu-cloud-template"
-        
+        vm_templates_template_id: "{{ ubuntu_template_id }}"
+        vm_templates_template_name: "ubuntu-cloud-template"
+
     - name: Create OPNsense template
-      include_role:
+      ansible.builtin.include_role:
         name: vm_templates
         tasks_from: opnsense
       vars:
-        template_id: "{{ opnsense_template_id }}"
-        template_name: "opnsense-template"
+        vm_templates_template_id: "{{ opnsense_template_id }}"
+        vm_templates_template_name: "opnsense-template"

@@ -17,65 +17,66 @@
     backup_mode: "{{ lookup('env', 'BACKUP_MODE') | default('snapshot') }}"  # snapshot or stop
     location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
     backup_storage_id: "{{ location_prefix }}-nas-backup"
-    
+
   tasks:
     - name: Check if backups are enabled
-      debug:
+      ansible.builtin.debug:
         msg: "VM backups are {{ 'ENABLED' if backup_enabled == 'true' else 'DISABLED' }}. Set ENABLE_VM_BACKUPS=true to enable."
-        
+
     - name: Ensure required packages are installed
-      apt:
+      ansible.builtin.apt:
         name:
           - nfs-common
           - cifs-utils
         state: present
       when: backup_enabled == 'true'
-      
+
     - name: Create NAS mount point
-      file:
+      ansible.builtin.file:
         path: "{{ nas_mount_point }}"
         state: directory
         mode: '0755'
       when: backup_enabled == 'true'
-      
+
     # NFS mount setup
     - name: Configure NFS mount
-      mount:
+      ansible.posix.mount:
         path: "{{ nas_mount_point }}"
         src: "{{ nas_address }}:{{ nas_share }}"
         fstype: nfs
         opts: "rw,soft,timeo=30,retrans=3,bg"
         state: mounted
-      when: 
+      when:
         - backup_enabled == 'true'
         - nas_protocol == 'nfs'
-        
+
     # CIFS/SMB mount setup
     - name: Configure CIFS credentials file
-      copy:
+      ansible.builtin.copy:
         content: |
           username={{ nas_username }}
           password={{ nas_password }}
         dest: "/root/.smbcredentials"
         mode: '0600'
-      when: 
+      when:
         - backup_enabled == 'true'
         - nas_protocol == 'cifs'
-        
+
     - name: Configure CIFS mount
-      mount:
+      ansible.posix.mount:
         path: "{{ nas_mount_point }}"
         src: "//{{ nas_address }}/{{ nas_share }}"
         fstype: cifs
         opts: "credentials=/root/.smbcredentials,iocharset=utf8,vers=3.0"
         state: mounted
-      when: 
+      when:
         - backup_enabled == 'true'
         - nas_protocol == 'cifs'
-        
+
     # Create backup storage in Proxmox
     - name: Create NAS backup storage in Proxmox
-      shell: |
+      ansible.builtin.shell: |
+        set -o pipefail
         if ! pvesm list | grep -q "{{ backup_storage_id }}"; then
           pvesm add dir "{{ backup_storage_id }}" --path "{{ nas_mount_point }}" --content backup
           echo "Storage added"
@@ -85,10 +86,10 @@
       register: storage_result
       changed_when: "'Storage added' in storage_result.stdout"
       when: backup_enabled == 'true'
-      
+
     # Configure backup job
     - name: Create backup job configuration
-      copy:
+      ansible.builtin.copy:
         content: |
           STORAGE="{{ backup_storage_id }}"
           MAILTO="root"
@@ -107,10 +108,10 @@
         dest: "/etc/vzdump.conf"
         mode: '0644'
       when: backup_enabled == 'true'
-      
+
     # Configure backup schedule via cron
     - name: Set up backup schedule
-      cron:
+      ansible.builtin.cron:
         name: "Proxmox VM Backup"
         cron_file: "proxmox-backup"
         user: "root"
@@ -121,32 +122,32 @@
         weekday: "{{ backup_schedule.split(' ')[4] }}"
         job: "/usr/bin/vzdump --all --quiet 1"
         state: "{{ 'present' if backup_enabled == 'true' else 'absent' }}"
-        
+
     # Add custom backup script with additional features
     - name: Create enhanced backup script
-      copy:
+      ansible.builtin.copy:
         content: |
           #!/bin/bash
-          
+
           # Enhanced VM Backup Script for Proxmox
           # Handles backup verification and notifications
-          
+
           DATE=$(date +%Y-%m-%d)
           LOGFILE="/var/log/proxmox-backup-$DATE.log"
-          
+
           echo "Starting backup job at $(date)" > $LOGFILE
-          
+
           # Run the backup
           /usr/bin/vzdump --all >> $LOGFILE 2>&1
           BACKUP_RESULT=$?
-          
+
           # Verify backup integrity
           if [ $BACKUP_RESULT -eq 0 ]; then
             echo "Backup completed successfully" >> $LOGFILE
-            
+
             # Find the newest backup files
             BACKUP_FILES=$(find {{ nas_mount_point }} -type f -name "*.vma.gz" -o -name "*.vma.lzo" -mtime -1)
-            
+
             # Verify backup files
             for FILE in $BACKUP_FILES; do
               if [ -s "$FILE" ]; then
@@ -159,25 +160,25 @@
           else
             echo "Backup failed with exit code $BACKUP_RESULT" >> $LOGFILE
           fi
-          
+
           # Clean up old logs (keep 30 days)
           find /var/log -name "proxmox-backup-*.log" -mtime +30 -delete
-          
+
           # Send notification
           if [ $BACKUP_RESULT -eq 0 ]; then
             echo "Proxmox {{ location_prefix }} Backup: SUCCESS" | mail -s "Proxmox Backup Successful" root
           else
             echo "Proxmox {{ location_prefix }} Backup: FAILED - Check $LOGFILE" | mail -s "Proxmox Backup FAILED" root
           fi
-          
+
           exit $BACKUP_RESULT
         dest: "/usr/local/bin/enhanced-proxmox-backup.sh"
         mode: '0755'
       when: backup_enabled == 'true'
-      
+
     # Use enhanced script in cron
     - name: Set up enhanced backup schedule
-      cron:
+      ansible.builtin.cron:
         name: "Proxmox VM Enhanced Backup"
         cron_file: "proxmox-enhanced-backup"
         user: "root"
@@ -188,22 +189,22 @@
         weekday: "{{ backup_schedule.split(' ')[4] }}"
         job: "/usr/local/bin/enhanced-proxmox-backup.sh"
         state: "{{ 'present' if backup_enabled == 'true' else 'absent' }}"
-        
+
     # Add backup status script
     - name: Create backup status script
-      copy:
+      ansible.builtin.copy:
         content: |
           #!/bin/bash
-          
+
           # Backup Status Report Script
-          
+
           BACKUP_DIR="{{ nas_mount_point }}"
-          
+
           echo "======================================================="
           echo "           Proxmox VM Backup Status Report"
           echo "======================================================="
           echo
-          
+
           # Check mount status
           if mountpoint -q "{{ nas_mount_point }}"; then
             echo "✅ Backup storage is mounted"
@@ -211,12 +212,12 @@
             echo "❌ ERROR: Backup storage is NOT mounted!"
             exit 1
           fi
-          
+
           # Check storage availability
           STORAGE_FREE=$(df -h "{{ nas_mount_point }}" | awk 'NR==2 {print $4}')
           STORAGE_USED=$(df -h "{{ nas_mount_point }}" | awk 'NR==2 {print $5}')
           echo "Storage available: $STORAGE_FREE ($STORAGE_USED used)"
-          
+
           # List latest backups
           echo
           echo "Latest backups (last 7 days):"
@@ -225,16 +226,16 @@
             SIZE=$(du -h "$file" | awk '{print $1}')
             DATE=$(stat -c %y "$file" | cut -d' ' -f1)
             VM_ID=$(basename "$file" | cut -d'-' -f1)
-            
+
             echo "VM $VM_ID: $DATE - $SIZE"
           done
-          
+
           # Check for failed backups
           echo
           echo "Recent backup logs:"
           echo "-------------------------------------------------------"
           grep -l "ERROR\|failed" /var/log/proxmox-backup-*.log 2>/dev/null
-          
+
           echo
           echo "Backup retention: {{ backup_retention }} backups per VM"
           echo "Backup schedule: {{ backup_schedule }}"
@@ -242,13 +243,13 @@
         dest: "/usr/local/bin/backup-status.sh"
         mode: '0755'
       when: backup_enabled == 'true'
-      
+
     - name: Display backup configuration message
-      debug:
+      ansible.builtin.debug:
         msg:
           - "Proxmox VM backup configuration {{ 'completed' if backup_enabled == 'true' else 'SKIPPED (disabled)' }}"
           - "Backup schedule: {{ backup_schedule if backup_enabled == 'true' else 'N/A' }}"
           - "Backup retention: {{ backup_retention if backup_enabled == 'true' else 'N/A' }} backups"
           - "NAS protocol: {{ nas_protocol if backup_enabled == 'true' else 'N/A' }}"
           - "Mount point: {{ nas_mount_point if backup_enabled == 'true' else 'N/A' }}"
-          - "To check backup status, run: backup-status.sh" 
+          - "To check backup status, run: backup-status.sh"

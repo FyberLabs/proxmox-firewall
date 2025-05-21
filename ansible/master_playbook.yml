@@ -4,8 +4,8 @@
   gather_facts: false
   tasks:
     - name: Display deployment banner
-      debug:
-        msg: 
+      ansible.builtin.debug:
+        msg:
           - "==================================================="
           - "Proxmox Firewall Deployment - Master Playbook"
           - "==================================================="
@@ -22,80 +22,84 @@
       tags: always
 
     - name: Create credentials directory
-      file:
+      ansible.builtin.file:
         path: "{{ playbook_dir }}/../credentials"
         state: directory
         mode: '0700'
       tags: always
 
     - name: Ensure .env file exists
-      copy:
+      ansible.builtin.copy:
         content: |
           # Proxmox Secrets
           ROOT_PASSWORD="your_secure_password"
           ADMIN_EMAIL="admin@example.com"
           # API keys will be added automatically by playbooks
         dest: "{{ playbook_dir }}/../.env"
-        force: no
+        force: false
         mode: '0600'
       tags: always
 
-    - name: Include Configure Proxmox repositories playbook
-      import_playbook: playbooks/00_configure_repos.yml
-      tags: ['repos', 'initial']
+# Import playbooks for each stage
+- name: Configure Proxmox repositories
+  import_playbook: playbooks/00_configure_repos.yml
+  tags: ['repos', 'initial']
 
-    - name: Include Initial Setup playbook
-      import_playbook: playbooks/01_initial_setup.yml
-      tags: ['initial', 'setup']
+- name: Perform initial Proxmox setup
+  import_playbook: playbooks/01_initial_setup.yml
+  tags: ['initial', 'setup']
 
-    - name: Include Update SSH Keys playbook
-      import_playbook: playbooks/02a_update_ssh_keys.yml
-      tags: ['security', 'ssh']
+- name: Update SSH keys
+  import_playbook: playbooks/02a_update_ssh_keys.yml
+  tags: ['security', 'ssh']
 
-    - name: Include Terraform API Setup playbook
-      import_playbook: playbooks/02_terraform_api.yml
-      tags: ['api', 'terraform']
+- name: Configure Terraform API access
+  import_playbook: playbooks/02_terraform_api.yml
+  tags: ['api', 'terraform']
 
-    - name: Include Network Transition playbook
-      import_playbook: playbooks/03a_network_transition.yml
-      tags: ['network', 'transition']
+- name: Set up network transition
+  import_playbook: playbooks/03a_network_transition.yml
+  tags: ['network', 'transition']
 
-    - name: Include Network Setup playbook
-      import_playbook: playbooks/03_network_setup.yml
-      tags: ['network']
+- name: Configure network bridges and VLANs
+  import_playbook: playbooks/03_network_setup.yml
+  tags: ['network']
 
-    - name: Include VM Templates playbook
-      import_playbook: playbooks/04_vm_templates.yml
-      tags: ['templates', 'vm']
+- name: Create VM templates
+  import_playbook: playbooks/04_vm_templates.yml
+  tags: ['templates', 'vm']
 
-    - name: Include Deploy VMs playbook
-      import_playbook: playbooks/05_deploy_vms.yml
-      tags: ['deploy', 'vm']
+- name: Deploy VMs with Terraform
+  import_playbook: playbooks/05_deploy_vms.yml
+  tags: ['deploy', 'vm']
 
-    - name: Include OPNsense Setup playbook
-      import_playbook: playbooks/06_opnsense_setup.yml
-      tags: ['opnsense', 'firewall']
-      
-    - name: Include Tailscale Integration playbook
-      import_playbook: playbooks/07c_opnsense_tailscale.yml
-      tags: ['opnsense', 'tailscale', 'network']
-      
-    - name: Include Suricata IDS/IPS Setup playbook
-      import_playbook: playbooks/07a_opnsense_suricata.yml
-      tags: ['security', 'suricata']
-      
-    - name: Include Zeek Network Monitor Setup playbook
-      import_playbook: playbooks/07b_zeek_setup.yml
-      tags: ['security', 'zeek']
+- name: Configure OPNsense firewalls
+  import_playbook: playbooks/06_opnsense_setup.yml
+  tags: ['opnsense', 'firewall']
 
-    - name: Optional - Disable Root Password Authentication
-      import_playbook: playbooks/02b_disable_root_password.yml
-      tags: ['security', 'ssh', 'never']
-      # This playbook is tagged with 'never' to prevent accidental execution
-      # Run with: ansible-playbook master_playbook.yml --tags security,ssh
+- name: Set up Tailscale integration
+  import_playbook: playbooks/07c_opnsense_tailscale.yml
+  tags: ['opnsense', 'tailscale', 'network']
 
+- name: Configure Suricata IDS/IPS
+  import_playbook: playbooks/07a_opnsense_suricata.yml
+  tags: ['security', 'suricata']
+
+- name: Set up Zeek network monitoring
+  import_playbook: playbooks/07b_zeek_setup.yml
+  tags: ['security', 'zeek']
+
+# Optional playbook - tagged with 'never' to prevent accidental execution
+- name: Disable root password authentication
+  import_playbook: playbooks/02b_disable_root_password.yml
+  tags: ['security', 'ssh', 'never']
+
+- name: Deployment Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
     - name: Deployment summary
-      debug:
+      ansible.builtin.debug:
         msg:
           - "==================================================="
           - "Deployment Complete!"

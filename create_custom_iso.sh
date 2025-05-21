@@ -17,8 +17,8 @@ sudo apt install -y whois proxmox-auto-install-assistant xorriso curl pipx
 #Local install of ansible and ansible-dev-tools
 pipx ensurepath
 pipx install --include-deps ansible
-pipx install ansible-dev-tools ansible-lint
-
+pipx install ansible-dev-tools ansible-lint httpx
+ansible-galaxy collection install -r ansible/collections/requirements.yml
 
 # Find latest Proxmox ISO
 ISO_NAME="proxmox-ve-custom.iso"

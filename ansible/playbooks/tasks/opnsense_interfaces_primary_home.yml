@@ -65,7 +65,7 @@
       type: none
     - interface: opt2
       type: dhcp
-    - interface: pxmg  
+    - interface: pxmg
       type: static
       ipv4_address: "10.2.50.1"
       ipv4_prefixlen: 24
@@ -75,7 +75,7 @@
       ipv4_prefixlen: 24
     - interface: vlan20
       type: static
-      ipv4_address: "10.2.20.1" 
+      ipv4_address: "10.2.20.1"
       ipv4_prefixlen: 24
     - interface: vlan30
       type: static
@@ -156,4 +156,4 @@
       mac: "{{ lookup('env', 'PH_NVR_MAC') }}"
       ip: "10.2.20.3"
       hostname: "nvr"
-      descr: "NVR" 
+      descr: "NVR"

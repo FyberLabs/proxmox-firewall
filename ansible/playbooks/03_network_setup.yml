@@ -12,7 +12,7 @@
     wan_interface: "{{ lookup('env', location_prefix + '_WAN_INTERFACE') }}"
     camera_interface: "{{ lookup('env', location_prefix + '_CAMERA_INTERFACE') }}"
     starlink_interface: "{{ lookup('env', location_prefix + '_STARLINK_INTERFACE') }}"
-    
+
     # Define VLAN configuration
     vlans:
       - id: 10
@@ -50,16 +50,16 @@
         enable_dhcp: true
         dhcp_start: "{{ network_prefix }}.50.100"
         dhcp_end: "{{ network_prefix }}.50.200"
-    
+
   tasks:
     - name: Check if transition has succeeded
-      stat:
+      ansible.builtin.stat:
         path: "/sys/class/net/vmbr0.50"
       register: mgmt_vlan_status
-    
+
     - name: Display network setup banner
-      debug:
-        msg: 
+      ansible.builtin.debug:
+        msg:
           - "========================================================"
           - "Setting up Network Bridges and VLANs for {{ inventory_hostname }}"
           - "========================================================"
@@ -70,87 +70,93 @@
           - "Management IP: {{ mgmt_ip }}"
           - "Initial IP (kept for transition): {{ initial_ip }}"
           - "========================================================"
-    
+
     # Configure network bridges
     - name: Set up vmbr0 - LAN bridge (10G SFP+)
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/network/interfaces
         regexp: '^auto vmbr0|^iface vmbr0'
         line: "auto vmbr0\niface vmbr0 inet manual\n    bridge-ports {{ lan_interface }}\n    bridge-stp off\n    bridge-fd 0\n    bridge-vlan-aware yes"
         state: present
         insertafter: EOF
       register: vmbr0_config
-    
+
     - name: Set up vmbr1 - WAN bridge (Fiber - 2.5G)
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/network/interfaces
         regexp: '^auto vmbr1|^iface vmbr1'
         line: "auto vmbr1\niface vmbr1 inet manual\n    bridge-ports {{ wan_interface }}\n    bridge-stp off\n    bridge-fd 0"
         state: present
         insertafter: EOF
       register: vmbr1_config
-    
+
     - name: Set up vmbr2 - Camera bridge (10G SFP+)
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/network/interfaces
         regexp: '^auto vmbr2|^iface vmbr2'
         line: "auto vmbr2\niface vmbr2 inet manual\n    bridge-ports {{ camera_interface }}\n    bridge-stp off\n    bridge-fd 0\n    bridge-vlan-aware yes"
         state: present
         insertafter: EOF
       register: vmbr2_config
-    
+
     - name: Set up vmbr3 - Starlink WAN bridge (2.5G)
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/network/interfaces
         regexp: '^auto vmbr3|^iface vmbr3'
         line: "auto vmbr3\niface vmbr3 inet manual\n    bridge-ports {{ starlink_interface }}\n    bridge-stp off\n    bridge-fd 0"
         state: present
         insertafter: EOF
       register: vmbr3_config
-    
+
     # Configure VLAN interfaces for Management VLAN (if not already done in transition)
     - name: Set up Management VLAN interface (if not already configured)
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/network/interfaces
         regexp: '^auto vmbr0.50|^iface vmbr0.50'
-        line: "auto vmbr0.50\niface vmbr0.50 inet static\n    address {{ mgmt_ip }}/24\n    gateway {{ network_prefix }}.50.1\n    vlan-id 50\n    vlan-raw-device vmbr0"
+        line: >-
+          auto vmbr0.50
+          iface vmbr0.50 inet static
+              address {{ mgmt_ip }}/24
+              gateway {{ network_prefix }}.50.1
+              vlan-id 50
+              vlan-raw-device vmbr0
         state: present
         insertafter: EOF
       when: not mgmt_vlan_status.stat.exists
       register: mgmt_vlan
-      
+
     # Configure interfaces for DHCP services
     - name: Install DHCP server
-      apt:
+      ansible.builtin.apt:
         name: isc-dhcp-server
         state: present
-        
+
     - name: Configure DHCP server
-      template:
+      ansible.builtin.template:
         src: "{{ playbook_dir }}/templates/dhcpd.conf.j2"
         dest: /etc/dhcp/dhcpd.conf
         mode: '0644'
       register: dhcp_config
-      
+
     - name: Create subnet configuration for VLANs
-      template:
+      ansible.builtin.template:
         src: "{{ playbook_dir }}/templates/subnet.conf.j2"
         dest: "/etc/dhcp/subnet-{{ item.id }}.conf"
         mode: '0644'
       with_items: "{{ vlans }}"
       when: item.enable_dhcp | bool
       register: subnet_configs
-    
+
     - name: Include subnet configurations in main config
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/dhcp/dhcpd.conf
         line: "include \"/etc/dhcp/subnet-{{ item.id }}.conf\";"
         insertafter: "^# Subnet configurations"
       with_items: "{{ vlans }}"
       when: item.enable_dhcp | bool
-    
+
     - name: Configure DHCP interfaces
-      template:
+      ansible.builtin.template:
         src: "{{ playbook_dir }}/templates/dhcpd.default.j2"
         dest: /etc/default/isc-dhcp-server
         mode: '0644'
@@ -163,48 +169,51 @@
           - "vmbr0.50"
           - "vmbr2.20"
       register: dhcp_interfaces
-    
+
     # Create directories for network and DHCP leases
     - name: Ensure DHCP lease directory exists
-      file:
+      ansible.builtin.file:
         path: /var/lib/dhcp
         state: directory
         mode: '0755'
-    
+
     # Restart networking and DHCP services
     - name: Restart networking
-      service:
+      ansible.builtin.service:
         name: networking
         state: restarted
       when: vmbr0_config.changed or vmbr1_config.changed or vmbr2_config.changed or vmbr3_config.changed or mgmt_vlan.changed
-      ignore_errors: true
-      
+      register: restart_net
+      failed_when:
+        - restart_net is failed
+        - "'Interface not found' not in restart_net.msg"
+
     - name: Enable and restart DHCP server
-      service:
+      ansible.builtin.service:
         name: isc-dhcp-server
         state: restarted
-        enabled: yes
+        enabled: true
       when: dhcp_config.changed or subnet_configs.changed or dhcp_interfaces.changed
-      
+
     - name: Verify management network connectivity
-      command: ping -c 1 {{ network_prefix }}.50.1
+      ansible.builtin.command: ping -c 1 {{ network_prefix }}.50.1
       register: management_ping
-      ignore_errors: true
+      failed_when: false
       changed_when: false
-      
+
     - name: Finalize IP transition
-      debug:
+      ansible.builtin.debug:
         msg:
           - "Network configuration complete"
           - "Management IP {{ mgmt_ip }} is {{ 'REACHABLE' if management_ping.rc == 0 else 'NOT REACHABLE' }}"
           - "Original IP {{ initial_ip }} is still accessible for redundancy"
           - "Once deployment is complete, you can remove the original IP from /etc/network/interfaces"
-    
+
     - name: Update inventory file with both IPs
       delegate_to: localhost
-      blockinfile:
+      ansible.builtin.blockinfile:
         path: "{{ playbook_dir }}/../credentials/host_ips.txt"
-        create: yes
+        create: true
         marker: "# {mark} {{ inventory_hostname }} IP ADDRESSES"
         block: |
           {{ inventory_hostname }} initial_ip={{ initial_ip }}

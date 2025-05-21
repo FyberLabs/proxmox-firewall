@@ -2,18 +2,16 @@
 - name: Configure Suricata IDS/IPS in OPNsense
   hosts: opnsense
   gather_facts: true
-  collections:
-    - ansibleguy.opnsense
   vars:
     location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
     network_prefix: "{{ '10.1' if 'tennessee' in group_names else '10.2' }}"
-    
+
   tasks:
     - name: Install IDS/IPS plugin
       ansibleguy.opnsense.package:
         name: os-suricata
         state: present
-      
+
     - name: Configure IDS/IPS general settings
       ansibleguy.opnsense.ids_general:
         enabled: true
@@ -22,7 +20,7 @@
         syslog_alerts: true
         detect_version: true
         clear_states: true
-        
+
     - name: Configure IDS/IPS on WAN interface
       ansibleguy.opnsense.ids_policy_rule:
         name: "WAN Protection - {{ location_prefix }}"
@@ -31,7 +29,7 @@
         description: "Monitor WAN interface traffic"
         interface: "wan"  # Primary WAN
         policy: "default"
-        
+
     - name: Configure IDS/IPS on WAN2 interface (Starlink)
       ansibleguy.opnsense.ids_policy_rule:
         name: "Starlink Protection - {{ location_prefix }}"
@@ -40,25 +38,25 @@
         description: "Monitor Starlink WAN interface traffic"
         interface: "opt2"  # Starlink WAN
         policy: "default"
-        
+
     - name: Download and enable ET Open ruleset
       ansibleguy.opnsense.ids_ruleset:
         name: "et-open"
         enabled: true
         action: "alert"
-        
+
     - name: Download and enable Abuse.ch ruleset
       ansibleguy.opnsense.ids_ruleset:
         name: "abuse-ch"
         enabled: true
         action: "alert"
-        
+
     - name: Download and enable Emerging Threats ruleset (enable as block)
       ansibleguy.opnsense.ids_ruleset:
         name: "et-pro"
         enabled: true
         action: "drop"
-        
+
     - name: Configure additional IDS settings for home networks
       ansibleguy.opnsense.ids_ruleset:
         name: "custom-rules"
@@ -68,17 +66,17 @@
           # Detect password brute force attempts
           alert tcp any any -> {{ network_prefix }}.0.0/16 22 (msg:"SSH brute force attempt"; flow:to_server; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:10000001; rev:1;)
           alert tcp any any -> {{ network_prefix }}.0.0/16 3389 (msg:"RDP brute force attempt"; flow:to_server; threshold: type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:10000002; rev:1;)
-          
+
           # Alert on known malicious traffic
           alert tcp any any -> {{ network_prefix }}.0.0/16 any (msg:"Possible C&C traffic detected"; flow:to_server,established; content:"POST"; http_method; content:"/gate.php"; http_uri; classtype:trojan-activity; sid:10000003; rev:1;)
-          
+
           # Alert on suspicious outbound connections
           alert tcp {{ network_prefix }}.0.0/16 any -> any 6667 (msg:"IRC traffic detected - possible bot"; flow:to_server,established; classtype:policy-violation; sid:10000004; rev:1;)
-          
+
           # Alert on potential data exfiltration
           alert tcp {{ network_prefix }}.0.0/16 any -> any any (msg:"Large outbound file transfer"; flow:to_server,established; byte_test:>500000,>,0,relative; threshold: type threshold, track by_src, count 3, seconds 300; classtype:suspicious-filename-detect; sid:10000005; rev:1;)
-                  
+
     - name: Configure IDS anomaly detection settings
       ansibleguy.opnsense.ids_action:
         name: "reload_rules"
-        state: present 
+        state: present

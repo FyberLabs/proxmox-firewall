@@ -4,47 +4,48 @@
   become: true
   tasks:
     - name: Remove Proxmox Enterprise subscription repository
-      file:
+      ansible.builtin.file:
         path: /etc/apt/sources.list.d/pve-enterprise.list
         state: absent
       register: enterprise_repo_removed
 
     - name: Add Proxmox community repository
-      apt_repository:
+      ansible.builtin.apt_repository:
         repo: "deb [arch=amd64] http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
         filename: proxmox-community
         state: present
       register: community_repo_added
 
     - name: Add Proxmox ceph repository
-      apt_repository:
+      ansible.builtin.apt_repository:
         repo: "deb http://download.proxmox.com/debian/ceph-quincy {{ ansible_distribution_release }} main"
         filename: ceph-quincy
         state: present
 
     - name: Install Proxmox signing key
-      apt_key:
+      ansible.builtin.apt_key:
         url: "http://download.proxmox.com/debian/proxmox-release-{{ ansible_distribution_release }}.gpg"
         state: present
 
     - name: Update APT cache
-      apt:
-        update_cache: yes
+      ansible.builtin.apt:
+        update_cache: true
       when: enterprise_repo_removed.changed or community_repo_added.changed
 
     - name: Disable subscription nag message (GUI-only)
-      blockinfile:
+      ansible.builtin.blockinfile:
         path: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
         marker: "// {mark} ANSIBLE MANAGED BLOCK - SUBSCRIPTION NAG"
         insertafter: ".*if \\(.*data.status.toLowerCase\\(\\) !== 'active'\\).*"
         block: |
                     /* Disable subscription nag - Added by Ansible */
                     if (false) {
-        backup: yes
+        backup: true
       register: nag_disabled
+      notify: Restart PVE proxy service
 
-    - name: Restart PVE proxy service if nag message was disabled
-      systemd:
+  handlers:
+    - name: Restart PVE proxy service
+      ansible.builtin.systemd:
         name: pveproxy
         state: restarted
-      when: nag_disabled.changed

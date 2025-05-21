@@ -5,49 +5,54 @@
   vars:
     # Path to authorized keys file in the repo
     repo_keys_file: "{{ ssh_keys_file }}"
-    
+
   pre_tasks:
     - name: Check if repo keys file exists
-      stat:
+      ansible.builtin.stat:
         path: "{{ repo_keys_file }}"
       register: repo_keys
       delegate_to: localhost
-      
+
     - name: Check if configured SSH key exists
-      stat:
+      ansible.builtin.stat:
         path: "{{ ansible_ssh_private_key_file }}.pub"
       register: local_key
       delegate_to: localhost
-      
+
     - name: Fail if no SSH keys are available
-      fail:
+      ansible.builtin.fail:
         msg: >
           No SSH keys found. Either create '{{ repo_keys_file }}' with your public keys
           or ensure '{{ ansible_ssh_private_key_file }}.pub' exists. SSH keys are required to prevent lockout.
       when: not repo_keys.stat.exists and not local_key.stat.exists
-      
+
     - name: Initialize SSH keys list
-      set_fact:
+      ansible.builtin.set_fact:
         ssh_keys: []
-        
+
     - name: Load keys from repo file
-      set_fact:
-        ssh_keys: "{{ ssh_keys + [ { 'name': item | regex_replace('^(.*)\\s.*$', '\\1') | default('repo_key_' + loop.index | string), 'state': 'present', 'key': item } ] }}"
+      ansible.builtin.set_fact:
+        ssh_keys: >-
+          {{ ssh_keys + [{
+            'name': item | regex_replace('^(.*)\\s.*$', '\\1') | default('repo_key_' + loop.index | string),
+            'state': 'present',
+            'key': item
+          }] }}
       loop: "{{ lookup('file', repo_keys_file).splitlines() }}"
       when: repo_keys.stat.exists and item | trim != ''
-      
+
     - name: Add configured key as fallback
-      set_fact:
+      ansible.builtin.set_fact:
         ssh_keys: "{{ ssh_keys + [ { 'name': 'ansible_key', 'state': 'present', 'key': lookup('file', ansible_ssh_private_key_file + '.pub') } ] }}"
       when: not repo_keys.stat.exists and local_key.stat.exists
-      
+
     - name: Show keys to be authorized
-      debug:
+      ansible.builtin.debug:
         msg: "Will authorize the following keys: {{ ssh_keys | map(attribute='name') | list }}"
-  
+
   tasks:
     - name: Ensure .ssh directory exists
-      file:
+      ansible.builtin.file:
         path: /root/.ssh
         state: directory
         mode: '0700'
@@ -55,7 +60,7 @@
         group: root
 
     - name: Ensure authorized_keys file exists
-      file:
+      ansible.builtin.file:
         path: /root/.ssh/authorized_keys
         state: touch
         mode: '0600'
@@ -63,9 +68,9 @@
         group: root
         modification_time: preserve
         access_time: preserve
-      
+
     - name: Add/Remove SSH keys to authorized_keys
-      authorized_key:
+      ansible.posix.authorized_key:
         user: root
         state: "{{ item.state }}"
         key: "{{ item.key }}"
@@ -75,10 +80,10 @@
       when: ssh_keys | length > 0
 
     - name: Read current authorized keys
-      slurp:
+      ansible.builtin.slurp:
         src: /root/.ssh/authorized_keys
       register: authorized_keys_content
 
     - name: Display current authorized keys
-      debug:
+      ansible.builtin.debug:
         msg: "Authorized SSH keys for root on {{ inventory_hostname }}:\n{{ authorized_keys_content.content | b64decode }}"

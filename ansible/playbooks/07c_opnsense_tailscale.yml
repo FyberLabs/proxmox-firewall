@@ -12,44 +12,44 @@
     advertised_routes:
       TN: "10.1.0.0/16"
       PH: "10.2.0.0/16"
-    
+
   tasks:
     - name: Check if Tailscale Auth Key is set
-      fail:
+      ansible.builtin.fail:
         msg: "Tailscale Auth Key (TF_VAR_tailscale_auth_key) is not set in your .env file"
       when: tailscale_auth_key is not defined or tailscale_auth_key == ""
-      
+
     - name: Check if OPNsense API credentials are set
-      fail:
+      ansible.builtin.fail:
         msg: "OPNsense API credentials ({{ location_prefix }}_OPNSENSE_API_KEY and {{ location_prefix }}_OPNSENSE_API_SECRET) are not set in your .env file"
       when: opnsense_api_key is not defined or opnsense_api_key == "" or opnsense_api_secret is not defined or opnsense_api_secret == ""
 
     - name: Install os-tailscale plugin
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/core/firmware/install/os-tailscale"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         status_code: [200, 201, 202]
         headers:
           Content-Type: "application/json"
       register: plugin_install_result
       failed_when: false
-      
+
     - name: Wait for plugin installation to complete
-      pause:
+      ansible.builtin.pause:
         seconds: 10
-        
+
     - name: Configure Tailscale Service
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/tailscale/service/set"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         body_format: json
         body:
           service:
@@ -65,26 +65,26 @@
             interfacemap: "internal:vlan10"  # Map internal interface to VLAN 10
         status_code: [200, 201, 202]
       register: tailscale_config
-      
+
     - name: Enable Tailscale Service
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/tailscale/service/reconfigure"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         status_code: [200, 201, 202]
       register: tailscale_enable
-      
+
     - name: Add Firewall Rules for Tailscale
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         body_format: json
         body:
           rule:
@@ -99,27 +99,27 @@
             log: "0"  # Don't log for performance
         status_code: [200, 201, 202]
       register: tailscale_fw_rule
-      
+
     - name: Apply Firewall Changes
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/apply"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         status_code: [200, 201, 202]
       register: apply_fw
-      
+
     # Add Firewall ACLs for cross-site access
     - name: Add ACL Rules for Cross-Site Access (VLAN 10 - Main LAN)
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         body_format: json
         body:
           rule:
@@ -133,16 +133,16 @@
             description: "Allow Cross-Site Main LAN Access via Tailscale"
         status_code: [200, 201, 202]
       register: cross_site_lan_rule
-      
+
     # Allow cross-site NAS access (Primary Home to/from Tennessee)
     - name: Add ACL Rules for NAS Access
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         body_format: json
         body:
           rule:
@@ -157,16 +157,16 @@
         status_code: [200, 201, 202]
       register: nas_access_rule
       when: network_prefix == "10.1" or (network_prefix == "10.2" and lookup('env', 'PH_NAS_IP', default='') != '')
-      
+
     # Allow cross-site Home Assistant access
     - name: Add ACL Rules for Home Assistant Access
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         body_format: json
         body:
           rule:
@@ -180,16 +180,16 @@
             description: "Allow Home Assistant Access via Tailscale"
         status_code: [200, 201, 202]
       register: homeassistant_access_rule
-      
+
     # Allow Management VLAN cross-site access for Omada Controllers
     - name: Add ACL Rules for Omada Cross-Site Management
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         body_format: json
         body:
           rule:
@@ -203,23 +203,23 @@
             description: "Allow Omada Controller Cross-Site Management"
         status_code: [200, 201, 202]
       register: omada_mgmt_rule
-      
+
     - name: Apply Firewall Changes Again
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ opnsense_ip }}/api/firewall/filter/apply"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
-        force_basic_auth: yes
-        validate_certs: no
+        force_basic_auth: true
+        validate_certs: false
         status_code: [200, 201, 202]
       register: apply_fw_again
-      
+
     - name: Display Tailscale Status
-      debug:
+      ansible.builtin.debug:
         msg:
           - "Tailscale has been configured on OPNsense at {{ opnsense_ip }}"
           - "Advertising routes: {{ advertised_routes[location_prefix] }}"
           - "Hostname: opnsense-{{ location_prefix | lower }}"
           - "Firewall rules have been added to allow Tailscale connectivity"
-          - "Cross-site access has been configured for Main LAN, NAS, and Home Assistant" 
+          - "Cross-site access has been configured for Main LAN, NAS, and Home Assistant"

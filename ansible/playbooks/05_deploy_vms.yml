@@ -1,27 +1,40 @@
 ---
 - name: Deploy VMs using Terraform
   hosts: proxmox  # This will run on all Proxmox hosts
+  become: false
   tasks:
     - name: Ensure Terraform directory exists
       delegate_to: localhost
-      file:
+      become: false
+      ansible.builtin.file:
         path: "{{ playbook_dir }}/../terraform"
         state: directory
-        
+        mode: '0755'
+
     - name: Create terraform.tfvars file with location-specific variables
       delegate_to: localhost
-      template:
+      become: false
+      ansible.builtin.template:
         src: templates/terraform.tfvars.j2
         dest: "{{ playbook_dir }}/../terraform/{{ inventory_hostname }}.tfvars"
-      
-    - name: Initialize Terraform
+        mode: '0644'
+      register: tfvars
+
+    - name: Run Terraform plan to check for changes
       delegate_to: localhost
-      shell: terraform init
+      become: false
+      ansible.builtin.command: terraform plan -var-file={{ inventory_hostname }}.tfvars -detailed-exitcode
       args:
         chdir: "{{ playbook_dir }}/../terraform"
-        
-    - name: Deploy VMs with Terraform for {{ inventory_hostname }}
+      register: terraform_plan
+      failed_when: terraform_plan.rc >= 2 and terraform_plan.rc != 2
+      changed_when: terraform_plan.rc == 2
+
+    - name: Initialize and apply Terraform configuration
       delegate_to: localhost
-      shell: terraform apply -auto-approve -var-file={{ inventory_hostname }}.tfvars
+      become: false
+      ansible.builtin.command: terraform apply -auto-approve -var-file={{ inventory_hostname }}.tfvars
       args:
         chdir: "{{ playbook_dir }}/../terraform"
+      when: terraform_plan.rc == 2 or tfvars.changed
+      changed_when: true

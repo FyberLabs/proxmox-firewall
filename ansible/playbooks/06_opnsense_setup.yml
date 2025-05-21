@@ -1,9 +1,9 @@
 ---
+# ansible-lint disable=missing-module
+
 - name: Configure OPNsense Firewalls
   hosts: opnsense
   gather_facts: true
-  collections:
-    - ansibleguy.opnsense
   vars:
     opn_api_key: "{{ lookup('env', 'OPNSENSE_API_KEY') | default(omit) }}"
     opn_api_secret: "{{ lookup('env', 'OPNSENSE_API_SECRET') | default(omit) }}"
@@ -14,31 +14,39 @@
     location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
     opnsense_api_key: "{{ lookup('env', location_prefix + '_OPNSENSE_API_KEY') | default('ansible') }}"
     opnsense_api_secret: "{{ lookup('env', location_prefix + '_OPNSENSE_API_SECRET') | default('') }}"
-    
-  tasks:
-    - name: Install Ansible OPNsense collection
-      delegate_to: localhost
-      ansible.builtin.shell: "ansible-galaxy collection install ansibleguy.opnsense"
+
+  pre_tasks:
+    - name: Check if OPNsense collection is installed
+      ansible.builtin.command: ansible-galaxy collection list ansibleguy.opnsense
+      register: opnsense_collection
       changed_when: false
-      run_once: true
-    
+      failed_when: false
+      delegate_to: localhost
+
+    - name: Install Ansible OPNsense collection if needed
+      ansible.builtin.command: ansible-galaxy collection install ansibleguy.opnsense
+      changed_when: true
+      delegate_to: localhost
+      when: "'ansibleguy.opnsense' not in opnsense_collection.stdout"
+
+  tasks:
     - name: Run initial OPNsense setup
-      include_tasks: tasks/opnsense_initial_setup.yml
+      ansible.builtin.include_tasks: tasks/opnsense_initial_setup.yml
       when: not opnsense_api_secret
-      
+
     - name: Configure general settings
       ansibleguy.opnsense.system_general:
         hostname: "opnsense-{{ 'tn' if 'tennessee' in group_names else 'ph' }}"
         domain: "{{ 'tn' if 'tennessee' in group_names else 'ph' }}.local"
         timezone: "UTC"
-      
+
     - name: Include location-specific interface configuration
-      include_tasks: "tasks/opnsense_interfaces_{{ 'tennessee' if 'tennessee' in group_names else 'primary_home' }}.yml"
-      
+      ansible.builtin.include_tasks: "tasks/opnsense_interfaces_{{ 'tennessee' if 'tennessee' in group_names else 'primary_home' }}.yml"
+
     - name: Include location-specific firewall rules configuration
-      include_tasks: "tasks/opnsense_firewall_{{ 'tennessee' if 'tennessee' in group_names else 'primary_home' }}.yml"
-      
+      ansible.builtin.include_tasks: "tasks/opnsense_firewall_{{ 'tennessee' if 'tennessee' in group_names else 'primary_home' }}.yml"
+
     - name: Install and configure Tailscale package
       ansibleguy.opnsense.package:
         name: os-tailscale
-        state: present 
+        state: present

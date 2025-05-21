@@ -121,8 +121,6 @@
 
 ## Firewall configuration
 
-Given the near-identical setups (10Gbps fiber, Starlink backup, Omada WiFi 7 APs, Reolink cameras, Home Assistant, and a single NAS in the primary home with plans for a second in Tennessee), the rules will focus on protecting your network, allowing necessary cross-home access (e.g., to the NAS, Home Assistant, and Omada controller), and isolating sensitive VLANs (e.g., cameras, IoT, guest). I'll provide recommended firewall rules for both homes, tailored to the10net IP addressing scheme(10.1.0.0/16 for Tennessee, 10.2.0.0/16 for Primary Home) and Tailscale's100.64.0.0/10VPN range, ensuring no IP conflicts and secure communication.
-
 Network Context
 
 - IP Ranges(from the previous IP range diagram):
@@ -130,18 +128,20 @@ Network Context
   - Tennessee:
 
     - VLAN 10 (Main LAN): 10.1.10.0/24 (e.g., Home Assistant: 10.1.10.10, future NAS: 10.1.10.100)
-    - VLAN 20 (Cameras): 10.1.20.0/24 (Reolink Pro Hub: 10.1.20.2, NVR: 10.1.20.3)
+    - VLAN 20 (Cameras): 10.1.20.0/24 (Reolink Pro Hub: 10.1.20.2, Dahua NVR: 10.1.20.3)
     - VLAN 30 (IoT): 10.1.30.0/24
     - VLAN 40 (Guest): 10.1.40.0/24
     - VLAN 50 (Management): 10.1.50.0/24 (Omada Controller: 10.1.50.2)
+
   - Primary Home:
 
     - VLAN 10 (Main LAN): 10.2.10.0/24 (Home Assistant: 10.2.10.10, NAS: 10.2.10.100, Desktops: 10.2.10.101–110)
-    - VLAN 20 (Cameras): 10.2.20.0/24 (Reolink Pro Hub: 10.2.20.2, NVR: 10.2.20.3)
+    - VLAN 20 (Cameras): 10.2.20.0/24 (Dahua NVR: 10.2.20.2, WiFi Cameras: 10.2.20.3+)
     - VLAN 30 (IoT): 10.2.30.0/24
     - VLAN 40 (Guest): 10.2.40.0/24
     - VLAN 50 (Management): 10.2.50.0/24 (Omada Controller: 10.2.50.2)
   - Tailscale: 100.64.0.0/10 (e.g., Tennessee OPNSense: 100.64.1.1, Primary Home NAS: 100.64.1.4)
+
 - Goals:
 
   - Allow Tennessee devices (VLAN 10) to access the Primary Home NAS (10.2.10.100) via SMB/NFS.
@@ -150,11 +150,32 @@ Network Context
   - Restrict camera VLAN (20) to local NVR and limited remote access.
   - Isolate IoT (VLAN 30) and Guest (VLAN 40) from sensitive resources.
   - Allow Tailscale VPN traffic (UDP 41641) and ensure Starlink compatibility.
+  
 - Assumptions:
 
   - Both OPNSense firewalls handle 10Gbps fiber and Starlink WANs.
   - Tailscale is configured with subnet routing for 10.1.x.x and 10.2.x.x.
   - Devices use static IPs where specified; others use DHCP (e.g., 10.1.10.100–254).
+
+### WAN Failover Configuration
+
+The deployment includes automatic WAN failover between the fiber and Starlink connections:
+
+- **Automatic Failover**: OPNsense is configured to automatically switch from the fiber (primary) to Starlink (backup) connection in case of failure, and back to fiber when it recovers.
+
+- **Gateway Group**: A gateway group named "WANFAILOVER" is created with:
+  - Fiber WAN as priority 1 (primary)
+  - Starlink WAN as priority 2 (backup)
+  - Packet loss monitoring with 1-second interval checks
+
+- **Failover Triggers**:
+  - Packet loss threshold triggering failover
+  - Connectivity monitoring to multiple destinations
+  - Automatic return to primary when fiber connection recovers
+
+- **Recovery**: When the primary fiber connection is restored, traffic automatically shifts back after connectivity is verified.
+
+This ensures seamless internet connectivity even during ISP outages or connection issues.
 
 General Firewall Rule Principles
 
@@ -176,14 +197,12 @@ Interface: WAN
 |---|---|---|---|---|---|
 |Order|Action|Source|Destination|Protocol/Port|Description|
 |1|Allow|Any|Any|UDP/41641|Allow Tailscale VPN traffic (WireGuard)|
-|2|Allow|Any|10.1.50.2|TCP/8088,8043|Omada Controller remote access (optional, restrict to VPN)|
-|3|Allow|Any|10.1.10.10|TCP/8123|Home Assistant remote access (optional, prefer VPN)|
-|4|Block|Any|Any|Any|Default deny (implicit)|
+|2|Block|Any|Any|Any|Default deny (implicit)|
 
 - Notes:
 
   - UDP 41641 is critical for Tailscale's WireGuard connections, especially with Starlink's CGNAT.
-  - Remote Omada/Home Assistant access is optional; prefer Tailscale VPN (100.64.x.x) for security.
+  - All remote access to services (Omada Controller, Home Assistant, NVR) should be done via Tailscale VPN for enhanced security.
 
 Interface: VLAN 10 (Main LAN, 10.1.10.0/24)
 
@@ -272,14 +291,12 @@ Interface: WAN
 |---|---|---|---|---|---|
 |Order|Action|Source|Destination|Protocol/Port|Description|
 |1|Allow|Any|Any|UDP/41641|Allow Tailscale VPN traffic|
-|2|Allow|Any|10.2.50.2|TCP/8088,8043|Omada Controller remote access (optional, restrict to VPN)|
-|3|Allow|Any|10.2.10.10|TCP/8123|Home Assistant remote access (optional, prefer VPN)|
-|4|Allow|Any|10.2.10.100|TCP/445,2049|NAS remote access (optional, prefer VPN)|
-|5|Block|Any|Any|Any|Default deny|
+|2|Block|Any|Any|Any|Default deny|
 
 - Notes:
 
-  - Similar to Tennessee, with NAS access added (restrict to Tailscale for security).
+  - Only Tailscale WireGuard traffic is allowed through WAN for enhanced security.
+  - All remote access to internal services (Home Assistant, NAS, Omada Controller) should be done via Tailscale.
 
 Interface: VLAN 10 (Main LAN, 10.2.10.0/24)
 
@@ -384,7 +401,7 @@ Implementation Steps
 
 1. Add Rules in OPNSense:
 
-   - Go toFirewall > Rules > \[Interface\]in the OPNSense GUI.
+   - Go to Firewall > Rules > \[Interface\]in the OPNSense GUI.
    - Create each rule, specifying source, destination, protocol/port, and description.
    - Set "Log" for initial testing, then disable for high-traffic rules (e.g., internet access).
 2. Test Rules:
@@ -405,10 +422,11 @@ Implementation Steps
 
 Considerations
 
-- NAS Security:
+- Remote Access Security:
 
-  - Prefer Tailscale for NAS access (100.64.1.4) over WAN to avoid exposing ports 445/2049.
-  - Use strong SMB credentials and consider IP whitelisting in TrueNAS.
+  - Use Tailscale exclusively for remote access instead of exposing services directly to WAN.
+  - Access services via their Tailscale IPs (100.x.x.x) for secure, encrypted connections.
+  - This approach significantly reduces attack surface and external exposure.
 - Omada Management:
 
   - The rules assume one Omada controller (e.g., Tennessee's 10.1.50.2) manages both homes. If using dual controllers, adjust VLAN 50 rules.

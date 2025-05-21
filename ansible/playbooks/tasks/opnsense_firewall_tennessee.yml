@@ -26,28 +26,10 @@
       log: true
     - interface: wan
       source: any
-      destination: "10.1.50.2"
-      protocol: "tcp"
-      destination_port: "8088,8043"
-      action: "pass"
-      description: "Omada Controller remote access (optional, restrict to VPN)"
-      sequence: 2
-      log: true
-    - interface: wan
-      source: any
-      destination: "10.1.10.10"
-      protocol: "tcp"
-      destination_port: "8123"
-      action: "pass"
-      description: "Home Assistant remote access (optional, prefer VPN)"
-      sequence: 3
-      log: true
-    - interface: wan
-      source: any
       destination: any
       action: "block"
       description: "Default deny"
-      sequence: 4
+      sequence: 2
       log: true
 
 # VLAN 10 rules

@@ -43,6 +43,41 @@
     - name: Include location-specific interface configuration
       ansible.builtin.include_tasks: "tasks/opnsense_interfaces_{{ 'tennessee' if 'tennessee' in group_names else 'primary_home' }}.yml"
 
+    - name: Configure WAN failover between fiber and Starlink
+      ansible.builtin.uri:
+        url: "https://{{ opn_api_host }}/api/routes/gateway/addItem"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: json
+        body:
+          gateway:
+            name: "WANFAILOVER"
+            description: "Auto-failover between Fiber and Starlink"
+            gateway_items: [
+              {"value": "WAN_FIBER|1|fiber", "data": "Fiber (Primary)"},
+              {"value": "WAN_STARLINK|2|starlink", "data": "Starlink (Backup)"}
+            ]
+            trigger_level: "packet_loss"
+            trigger_interval: "1000"
+            weight: "1"
+            default: "1"
+        status_code: [200, 201, 202]
+      register: gateway_group_result
+
+    - name: Apply gateway changes
+      ansible.builtin.uri:
+        url: "https://{{ opn_api_host }}/api/routes/gateway/reconfigure"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: true
+        validate_certs: false
+        status_code: [200, 201, 202]
+      register: apply_gw
+
     - name: Include location-specific firewall rules configuration
       ansible.builtin.include_tasks: "tasks/opnsense_firewall_{{ 'tennessee' if 'tennessee' in group_names else 'primary_home' }}.yml"
 

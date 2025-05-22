@@ -1,0 +1,64 @@
+# Game Console device template
+type: game_console
+description: "{{ console_type | default('Gaming console (PlayStation, Xbox, etc.)') }}"
+vlan: {{ vlan | default(10) }}  # Main LAN by default
+ip_suffix: {{ ip_suffix | default(50) }}
+ports:
+{% if xbox | default(false) %}
+  - port: 3074
+    protocol: udp
+    description: "Xbox Live"
+  - port: 3074
+    protocol: tcp
+    description: "Xbox Live TCP"
+  - port: 53
+    protocol: udp
+    description: "DNS (Xbox)"
+  - port: 500
+    protocol: udp
+    description: "IKE (Xbox)"
+  - port: 3544
+    protocol: udp
+    description: "Teredo (Xbox)"
+{% endif %}
+{% if playstation | default(false) %}
+  - port: 3478-3480
+    protocol: udp
+    description: "PlayStation Network"
+  - port: 3478-3479
+    protocol: tcp
+    description: "PlayStation Network TCP"
+  - port: 3658
+    protocol: udp
+    description: "PlayStation Game traffic"
+{% endif %}
+{% if nintendo | default(false) %}
+  - port: 1-65535
+    protocol: udp
+    description: "Nintendo Switch P2P"
+  - port: 6667
+    protocol: tcp
+    description: "Nintendo voice chat"
+  - port: 12400-26900
+    protocol: udp
+    description: "Nintendo game servers"
+  - port: 28910
+    protocol: tcp
+    description: "Nintendo authentication"
+{% endif %}
+{% if voice_chat | default(false) %}
+  - port: 9000-9999
+    protocol: udp
+    description: "Game voice chat"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('udp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+upnp_enabled: {{ upnp_enabled | default(true) }}
+allow_internet: {{ allow_internet | default(true) }}
+allow_local_network: {{ allow_local_network | default(true) }}
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}

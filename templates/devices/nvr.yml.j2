@@ -1,0 +1,38 @@
+# NVR device template
+type: nvr
+description: "{{ nvr_type | default('Network Video Recorder for security cameras') }}"
+vlan: {{ vlan | default(20) }}  # Camera VLAN by default
+ip_suffix: {{ ip_suffix | default(3) }}
+ports:
+  - port: {{ web_port | default(443) }}
+    protocol: tcp
+    description: "Web interface"
+{% if rtsp_enabled | default(true) %}
+  - port: {{ rtsp_port | default(9000) }}
+    protocol: tcp
+    description: "RTSP streaming"
+{% endif %}
+{% if onvif_enabled | default(false) %}
+  - port: 3702
+    protocol: udp
+    description: "ONVIF discovery"
+{% endif %}
+{% if mobile_app_enabled | default(true) %}
+  - port: {{ mobile_app_port | default(8000) }}
+    protocol: tcp
+    description: "Mobile app access"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(false) }}
+allow_local_network: {{ allow_local_network | default(false) }}
+allow_from_vlans:
+  - vlan: 10  # Main LAN
+    ports: [{{ web_port | default(443) }}, {{ rtsp_port | default(9000) }}]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}

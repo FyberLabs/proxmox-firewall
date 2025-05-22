@@ -109,20 +109,18 @@ EOL
 ${site_name^^}_PROXMOX_HOST="${proxmox_host}"
 ${site_name^^}_NETWORK_PREFIX="${network_prefix}"
 ${site_name^^}_DOMAIN="${domain}"
-# ${site_name^^}_HOME_ASSISTANT_MAC="00:00:00:00:00:00"
-# ${site_name^^}_NAS_MAC="00:00:00:00:00:00"
-# ${site_name^^}_NVR_MAC="00:00:00:00:00:00"
-# ${site_name^^}_OMADA_MAC="00:00:00:00:00:00"
+# Device MAC addresses will be added when you run add_device.sh
+# Each device will get its own environment variable with format:
+# ${site_name^^}_DEVICE_NAME_MAC="xx:xx:xx:xx:xx:xx"
 EOL
     fi
 
     echo -e "\n${GREEN}Site configuration for ${site_display_name} created successfully!${NC}"
     echo -e "${YELLOW}Next steps:${NC}"
     echo -e "1. Update your .env file with the necessary credentials"
-    echo -e "2. Initialize Terraform for this site with:"
-    echo -e "   cd terraform && terraform init -backend-config=\"path=states/${site_name}/terraform.tfstate\""
-    echo -e "3. Apply Terraform with:"
-    echo -e "   terraform apply -var-file=\"${site_name}.tfvars\""
+    echo -e "2. Add network devices using: ./add_device.sh"
+    echo -e "3. Deploy the complete infrastructure with Ansible:"
+    echo -e "   ansible-playbook ansible/master_playbook.yml --limit=${site_name}"
 }
 
 # Function to list existing sites
@@ -229,14 +227,14 @@ deploy_site() {
     echo -e "\n${GREEN}Deployment commands for ${SITE_DISPLAY_NAME}:${NC}"
     echo -e "${YELLOW}Make sure your .env file is updated with credentials for this site${NC}"
     echo
-    echo -e "${BLUE}# Initialize Terraform (only needed once per site)${NC}"
-    echo -e "cd terraform && terraform init -backend-config=\"path=states/${site_name}/terraform.tfstate\""
+    echo -e "${BLUE}# Configure devices for this site (if not done already)${NC}"
+    echo -e "./add_device.sh"
     echo
-    echo -e "${BLUE}# Deploy infrastructure with Terraform${NC}"
-    echo -e "terraform apply -var-file=\"${site_name}.tfvars\""
+    echo -e "${BLUE}# Deploy the complete infrastructure with Ansible${NC}"
+    echo -e "ansible-playbook ansible/master_playbook.yml --limit=${site_name}"
     echo
-    echo -e "${BLUE}# Run Ansible playbooks for this site${NC}"
-    echo -e "cd .. && ansible-playbook ansible/master_playbook.yml --limit=${site_name}"
+    echo -e "${BLUE}# For network-specific updates only${NC}"
+    echo -e "ansible-playbook ansible/master_playbook.yml --limit=${site_name} --tags=network,dhcp"
     echo
 }
 

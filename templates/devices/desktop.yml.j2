@@ -1,0 +1,47 @@
+# Desktop PC device template
+type: desktop
+description: "{{ pc_type | default('Desktop computer') }}"
+vlan: {{ vlan | default(10) }}  # Main LAN by default
+ip_suffix: {{ ip_suffix | default(101) }}
+ports:
+{% if rdp_enabled | default(false) %}
+  - port: 3389
+    protocol: tcp
+    description: "Remote Desktop"
+{% endif %}
+{% if ssh_enabled | default(false) %}
+  - port: 22
+    protocol: tcp
+    description: "SSH"
+{% endif %}
+{% if media_server | default(false) %}
+  - port: 8096
+    protocol: tcp
+    description: "Media server (Jellyfin/Emby)"
+{% endif %}
+{% if web_server | default(false) %}
+  - port: 80
+    protocol: tcp
+    description: "HTTP server"
+  - port: 443
+    protocol: tcp
+    description: "HTTPS server"
+{% endif %}
+{% if game_server | default(false) %}
+  - port: 27015
+    protocol: udp
+    description: "Game server"
+  - port: 27015
+    protocol: tcp
+    description: "Game server admin"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}
+allow_local_network: {{ allow_local_network | default(true) }}
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}

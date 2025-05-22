@@ -1,0 +1,58 @@
+# Kubernetes Cluster example configuration
+template: custom.yml.j2
+
+# Basic device information
+device_type: kubernetes
+device_description: "Kubernetes Master Node"
+vlan: 10
+ip_suffix: 200
+
+# Primary Kubernetes API port
+primary_port: 6443
+primary_protocol: tcp
+primary_description: "Kubernetes API Server"
+
+# Secondary ports for kubelet, etc.
+secondary_port: 10250
+secondary_protocol: tcp
+secondary_description: "Kubelet API"
+
+# Management port for SSH
+management_port: 22
+management_protocol: tcp
+management_description: "SSH Access"
+
+# Additional ports for various Kubernetes services
+additional_ports:
+  - port: 2379-2380
+    protocol: tcp
+    description: "etcd server client API"
+  - port: 10251
+    protocol: tcp
+    description: "kube-scheduler"
+  - port: 10252
+    protocol: tcp
+    description: "kube-controller-manager"
+  - port: 30000-32767
+    protocol: tcp
+    description: "NodePort Services Range"
+  - port: 179
+    protocol: tcp
+    description: "Calico BGP"
+
+# Security settings
+allow_internet: false
+allow_local_network: true
+
+# Allow access from other VLANs
+allowed_vlans:
+  - vlan: 50
+    ports: [6443, 22]
+    protocol: tcp
+
+# Custom fields
+custom_fields:
+  is_control_plane: true
+  pod_network_cidr: "10.244.0.0/16"
+  service_cidr: "10.96.0.0/12"
+  kubernetes_version: "1.28.2"

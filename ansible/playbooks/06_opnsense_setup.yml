@@ -85,3 +85,29 @@
       ansibleguy.opnsense.package:
         name: os-tailscale
         state: present
+
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "{{ ansible_user_dir }}/group_vars/{{ inventory_hostname.split('_')[0] }}.yml"
+
+    - name: Set network prefix from site config
+      ansible.builtin.set_fact:
+        network_prefix: "{{ site_config.network_prefix }}"
+        domain: "{{ site_config.domain }}"
+
+    - name: Configure OPNsense interfaces
+      ansible.builtin.include_tasks: tasks/opnsense_interfaces.yml
+      tags: ['network', 'interfaces']
+
+    - name: Configure OPNsense device firewall rules
+      ansible.builtin.include_tasks: tasks/opnsense_device_firewall.yml
+      tags: ['network', 'firewall']
+      when: site_devices is defined
+
+    - name: Configure OPNsense WAN gateways and failover
+      ansible.builtin.include_tasks: tasks/opnsense_wan_failover.yml
+      tags: ['network', 'wan']
+
+    - name: Configure OPNsense basic services (DNS, NTP, etc.)
+      ansible.builtin.include_tasks: tasks/opnsense_services.yml
+      tags: ['services']

@@ -1,0 +1,34 @@
+# Home Assistant device template
+type: homeassistant
+description: "Home Assistant automation server"
+vlan: {{ vlan | default(10) }}  # Main LAN by default
+ip_suffix: {{ ip_suffix | default(10) }}
+ports:
+  - port: {{ web_port | default(8123) }}
+    protocol: tcp
+    description: "Home Assistant web interface"
+{% if sonos_integration | default(false) %}
+  - port: 1400
+    protocol: tcp
+    description: "Sonos integration"
+{% endif %}
+{% if zwave_integration | default(false) %}
+  - port: 8091
+    protocol: tcp
+    description: "Z-Wave JS UI"
+{% endif %}
+{% if mqtt_integration | default(true) %}
+  - port: 1883
+    protocol: tcp
+    description: "MQTT broker"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}
+allow_local_network: {{ allow_local_network | default(true) }}
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}

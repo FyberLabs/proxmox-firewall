@@ -1,0 +1,212 @@
+---
+# Create dynamic firewall rules based on configured devices
+
+- name: Set common aliases for the firewall rules
+  ansible.builtin.set_fact:
+    lan_network: "{{ network_prefix }}.10.0/24"
+    camera_network: "{{ network_prefix }}.20.0/24"
+    iot_network: "{{ network_prefix }}.30.0/24"
+    guest_network: "{{ network_prefix }}.40.0/24"
+    mgmt_network: "{{ network_prefix }}.50.0/24"
+
+# Create aliases for device IPs
+- name: Create device IP aliases
+  ansibleguy.opnsense.alias:
+    name: "dev_{{ item.key }}"
+    type: "host"
+    content: "{{ item.value.ip_address }}"
+    description: "{{ item.value.type | capitalize }} - {{ item.key }}"
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when: site_devices is defined
+
+# Create port aliases for devices
+- name: Load device port information
+  ansible.builtin.set_fact:
+    device_ports: >-
+      {{ device_ports | default({}) | combine({
+         item.key: lookup('file', 'devices/' + item.value.type + '.yml')
+         | from_yaml | json_query('ports')
+       }) }}
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when: site_devices is defined
+
+- name: Create port aliases for devices with ports
+  ansibleguy.opnsense.alias:
+    name: "ports_{{ item.key }}"
+    type: "port"
+    content: "{{ device_ports[item.key] | map(attribute='port') | join(',') }}"
+    description: "Ports for {{ item.value.type | capitalize }} - {{ item.key }}"
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when:
+    - site_devices is defined
+    - device_ports is defined
+    - device_ports[item.key] | default([]) | length > 0
+
+# Create firewall rules based on device type
+- name: Configure Main LAN device firewall rules
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow access to {{ item.key }}"
+    interface: "lan"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ lan_network }}"
+    destination: "{{ item.value.ip_address }}/32"
+    destination_port: "{{ 'ports_' + item.key if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
+    protocol: "{{ 'TCP/UDP' if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
+    action: "pass"
+    log: false
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when:
+    - site_devices is defined
+    - item.value.vlan == 10
+
+- name: Configure Camera VLAN device firewall rules
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow access to {{ item.key }}"
+    interface: "opt1"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ camera_network }}"
+    destination: "{{ item.value.ip_address }}/32"
+    destination_port: "{{ 'ports_' + item.key if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
+    protocol: "{{ 'TCP/UDP' if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
+    action: "pass"
+    log: false
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when:
+    - site_devices is defined
+    - item.value.vlan == 20
+
+- name: Configure IoT VLAN device firewall rules
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow access to {{ item.key }}"
+    interface: "lan"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ iot_network }}"
+    destination: "{{ item.value.ip_address }}/32"
+    destination_port: "{{ 'ports_' + item.key if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
+    protocol: "{{ 'TCP/UDP' if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
+    action: "pass"
+    log: false
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when:
+    - site_devices is defined
+    - item.value.vlan == 30
+
+# Allow Main LAN access to NAS devices
+- name: Configure Main LAN access to NAS
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow Main LAN access to {{ item.key }}"
+    interface: "lan"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ lan_network }}"
+    destination: "{{ item.value.ip_address }}/32"
+    destination_port: "445,2049"
+    protocol: "TCP"
+    action: "pass"
+    log: false
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when:
+    - site_devices is defined
+    - item.value.type == "nas"
+
+# Allow Main LAN access to NVR devices in camera VLAN
+- name: Configure Main LAN access to NVR
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow Main LAN access to {{ item.key }}"
+    interface: "opt1"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ lan_network }}"
+    destination: "{{ item.value.ip_address }}/32"
+    destination_port: "443,9000"
+    protocol: "TCP"
+    action: "pass"
+    log: false
+    enabled: true
+  loop: "{{ site_devices | default({}) | dict2items }}"
+  when:
+    - site_devices is defined
+    - item.value.type == "nvr"
+
+# Allow Home Assistant access to IoT devices
+- name: Configure Home Assistant access to IoT devices
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow Home Assistant access to IoT VLAN"
+    interface: "lan"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ site_devices.homeassistant.ip_address | default('10.1.10.10') }}/32"
+    destination: "{{ iot_network }}"
+    protocol: "any"
+    action: "pass"
+    log: false
+    enabled: true
+  when:
+    - site_devices is defined
+    - site_devices.homeassistant is defined
+
+# Block all other inter-VLAN traffic by default
+- name: Block inter-VLAN traffic by default
+  ansibleguy.opnsense.firewall_rule:
+    name: "Block {{ item.source_name }} to {{ item.dest_name }}"
+    interface: "{{ item.interface }}"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ item.source }}"
+    destination: "{{ item.destination }}"
+    protocol: "any"
+    action: "block"
+    log: false
+    enabled: true
+  loop:
+    - { interface: "lan", source: "{{ lan_network }}", destination: "{{ camera_network }}", source_name: "Main LAN", dest_name: "Camera VLAN" }
+    - { interface: "lan", source: "{{ lan_network }}", destination: "{{ guest_network }}", source_name: "Main LAN", dest_name: "Guest VLAN" }
+    - { interface: "lan", source: "{{ guest_network }}", destination: "{{ lan_network }}", source_name: "Guest VLAN", dest_name: "Main LAN" }
+    - { interface: "lan", source: "{{ guest_network }}", destination: "{{ camera_network }}", source_name: "Guest VLAN", dest_name: "Camera VLAN" }
+    - { interface: "lan", source: "{{ guest_network }}", destination: "{{ iot_network }}", source_name: "Guest VLAN", dest_name: "IoT VLAN" }
+    - { interface: "opt1", source: "{{ camera_network }}", destination: "{{ lan_network }}", source_name: "Camera VLAN", dest_name: "Main LAN" }
+    - { interface: "opt1", source: "{{ camera_network }}", destination: "{{ iot_network }}", source_name: "Camera VLAN", dest_name: "IoT VLAN" }
+    - { interface: "opt1", source: "{{ camera_network }}", destination: "{{ guest_network }}", source_name: "Camera VLAN", dest_name: "Guest VLAN" }
+
+# Allow all VLANs to access internet
+- name: Allow internet access for all VLANs
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow {{ item.name }} internet access"
+    interface: "{{ item.interface }}"
+    direction: "in"
+    ipprotocol: "inet"
+    source: "{{ item.network }}"
+    destination: "any"
+    destination_not: true
+    destination_net: "{{ lan_network }},{{ camera_network }},{{ iot_network }},{{ guest_network }},{{ mgmt_network }}"
+    protocol: "any"
+    action: "pass"
+    log: false
+    enabled: true
+  loop:
+    - { interface: "lan", network: "{{ lan_network }}", name: "Main LAN" }
+    - { interface: "lan", network: "{{ iot_network }}", name: "IoT VLAN" }
+    - { interface: "lan", network: "{{ guest_network }}", name: "Guest VLAN" }
+    - { interface: "opt1", network: "{{ camera_network }}", name: "Camera VLAN" }
+
+# Always allow Tailscale traffic through WAN
+- name: Allow Tailscale WireGuard traffic
+  ansibleguy.opnsense.firewall_rule:
+    name: "Allow Tailscale WireGuard"
+    interface: "wan"
+    direction: "in"
+    ipprotocol: "inet"
+    protocol: "UDP"
+    destination_port: "41641"
+    action: "pass"
+    log: false
+    enabled: true

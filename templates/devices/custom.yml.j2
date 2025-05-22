@@ -1,0 +1,64 @@
+# Custom device template - Use this as a starting point for your own devices
+type: {{ device_type | default('custom') }}
+description: "{{ device_description | default('Custom Network Device') }}"
+vlan: {{ vlan | default(10) }}  # Default VLAN (10=Main LAN, 20=Cameras, 30=IoT, 40=Guest, 50=Management)
+ip_suffix: {{ ip_suffix | default(150) }}
+
+# Define all ports this device uses
+ports:
+{% if primary_port is defined %}
+  - port: {{ primary_port }}
+    protocol: {{ primary_protocol | default('tcp') }}
+    description: "{{ primary_description | default('Primary service') }}"
+{% endif %}
+{% if secondary_port is defined %}
+  - port: {{ secondary_port }}
+    protocol: {{ secondary_protocol | default('tcp') }}
+    description: "{{ secondary_description | default('Secondary service') }}"
+{% endif %}
+{% if management_port is defined %}
+  - port: {{ management_port }}
+    protocol: {{ management_protocol | default('tcp') }}
+    description: "{{ management_description | default('Management interface') }}"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+
+# Security settings
+allow_internet: {{ allow_internet | default(false) }}
+allow_local_network: {{ allow_local_network | default(true) }}
+
+{% if allowed_vlans is defined %}
+# Allow access from specific VLANs
+allow_from_vlans:
+{% for vlan_access in allowed_vlans %}
+  - vlan: {{ vlan_access.vlan }}
+    ports: {{ vlan_access.ports | default(['any']) }}
+    protocol: {{ vlan_access.protocol | default('tcp') }}
+{% endfor %}
+{% endif %}
+
+{% if allowed_ips is defined %}
+# Allow access from specific IPs
+allow_from_ips:
+{% for ip_access in allowed_ips %}
+  - ip: {{ ip_access.ip }}
+    ports: {{ ip_access.ports | default(['any']) }}
+    protocol: {{ ip_access.protocol | default('tcp') }}
+{% endfor %}
+{% endif %}
+
+# DHCP settings
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}
+
+# Additional custom fields
+{% if custom_fields is defined %}
+{% for key, value in custom_fields.items() %}
+{{ key }}: {{ value }}
+{% endfor %}
+{% endif %}

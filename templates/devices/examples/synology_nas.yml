@@ -1,0 +1,38 @@
+# Synology NAS example configuration
+template: nas.yml.j2
+
+# Basic device information
+nas_type: "Synology NAS DS920+"
+vlan: 10
+ip_suffix: 100
+
+# Enabled services
+smb_enabled: true
+nfs_enabled: true
+web_ui_enabled: true
+web_ui_port: 5001
+ssh_enabled: true
+iscsi_enabled: true
+afp_enabled: false
+docker_enabled: true
+plex_enabled: true
+
+# Additional ports for Synology-specific services
+additional_ports:
+  - port: 5000
+    protocol: tcp
+    description: "Synology DSM HTTP"
+  - port: 6690
+    protocol: tcp
+    description: "Synology Audio Station"
+  - port: 5005
+    protocol: tcp
+    description: "Synology QuickConnect"
+  - port: 5006
+    protocol: tcp
+    description: "Synology Drive"
+
+# Security settings
+allow_internet: false
+allow_local_network: true
+needs_dhcp_reservation: true

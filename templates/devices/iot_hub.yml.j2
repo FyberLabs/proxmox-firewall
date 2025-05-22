@@ -1,0 +1,48 @@
+# IoT Hub device template
+type: iot_hub
+description: "{{ hub_type | default('Smart home hub (Hue Bridge, SmartThings, etc.)') }}"
+vlan: {{ vlan | default(30) }}  # IoT VLAN by default
+ip_suffix: {{ ip_suffix | default(10) }}
+ports:
+{% if http_api | default(true) %}
+  - port: {{ http_port | default(80) }}
+    protocol: tcp
+    description: "HTTP API"
+{% endif %}
+{% if https_api | default(true) %}
+  - port: {{ https_port | default(443) }}
+    protocol: tcp
+    description: "HTTPS API"
+{% endif %}
+{% if zwave | default(false) %}
+  - port: 56839
+    protocol: udp
+    description: "Z-Wave"
+{% endif %}
+{% if zigbee | default(false) %}
+  - port: 8080
+    protocol: tcp
+    description: "Zigbee"
+{% endif %}
+{% if discovery | default(true) %}
+  - port: 1900
+    protocol: udp
+    description: "UPnP/SSDP discovery"
+  - port: 5353
+    protocol: udp
+    description: "mDNS discovery"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}
+allow_local_network: {{ allow_local_network | default(false) }}
+allow_from_vlans:
+  - vlan: 10  # Main LAN access
+    ports: [{{ http_port | default(80) }}, {{ https_port | default(443) }}]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}

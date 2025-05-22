@@ -1,0 +1,45 @@
+# IP Camera device template
+type: camera
+description: "{{ camera_type | default('IP Security Camera') }}"
+vlan: {{ vlan | default(20) }}  # Camera VLAN by default
+ip_suffix: {{ ip_suffix | default(20) }}
+ports:
+{% if rtsp_enabled | default(true) %}
+  - port: {{ rtsp_port | default(554) }}
+    protocol: tcp
+    description: "RTSP stream"
+{% endif %}
+{% if http_enabled | default(true) %}
+  - port: {{ http_port | default(80) }}
+    protocol: tcp
+    description: "HTTP interface"
+{% endif %}
+{% if https_enabled | default(false) %}
+  - port: {{ https_port | default(443) }}
+    protocol: tcp
+    description: "HTTPS interface"
+{% endif %}
+{% if onvif_enabled | default(true) %}
+  - port: 3702
+    protocol: udp
+    description: "ONVIF discovery"
+  - port: 8000
+    protocol: tcp
+    description: "ONVIF media"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(false) }}
+allow_local_network: {{ allow_local_network | default(false) }}
+# Only allow NVR to access the camera
+allow_from_ips:
+  - ip: "{{ nvr_ip | default(network_prefix + '.20.3') }}"
+    ports: [{{ rtsp_port | default(554) }}, {{ http_port | default(80) }}]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}
+nvr_managed: {{ nvr_managed | default(true) }}

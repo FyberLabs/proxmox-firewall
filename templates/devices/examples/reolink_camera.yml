@@ -1,0 +1,31 @@
+# Reolink Camera example configuration
+template: camera.yml.j2
+
+# Basic device information
+camera_type: "Reolink RLC-811A 4K PoE Camera"
+vlan: 20
+ip_suffix: 21
+
+# Network settings
+rtsp_enabled: true
+rtsp_port: 554
+http_enabled: true
+http_port: 80
+https_enabled: true
+https_port: 443
+onvif_enabled: true
+
+# Camera-specific ports
+additional_ports:
+  - port: 9000
+    protocol: tcp
+    description: "Reolink proprietary stream"
+
+# Security settings
+allow_internet: false
+allow_local_network: false
+
+# NVR connection
+nvr_ip: "10.1.20.3"  # Update with your actual NVR IP
+nvr_managed: true
+needs_dhcp_reservation: true

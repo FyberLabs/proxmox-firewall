@@ -1,9 +1,16 @@
-proxmox_host         = "10.1.50.1"  # Proxmox management IP
-proxmox_api_secret   = "your-api-secret-here"
-ssh_public_key       = "ssh-rsa AAAAB3NzaC1yc2E..."
-tailscale_auth_key   = "tskey-auth-xxxxx"
-omada_password       = "secure-password-for-omada"
-tailscale_password   = "secure-password-for-tailscale"
-timezone             = "America/Chicago"
-target_node          = "pve"
-network_prefix       = "10.1"  # Use 10.1 for Tennessee, 10.2 for Primary Home
+# Example variable values - create a copy named terraform.tfvars or <site>.tfvars for each site
+proxmox_host = "proxmox.example.com"
+
+# These secrets should be sourced from .env file or environment variables
+# proxmox_api_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# tailscale_auth_key = "tskey-xxxxxxxxxxxxxxx"
+
+# Per-site configuration
+site_name = "primary"  # Short name (primary, secondary, etc.)
+site_display_name = "Primary Home"
+network_prefix = "10.1"  # Change for each site (10.1, 10.2, etc.)
+domain = "primary.local"
+
+# Common configuration
+timezone = "America/New_York"
+target_node = "pve"

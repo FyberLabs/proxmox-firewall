@@ -169,7 +169,7 @@
       protocol: "tcp"
       destination_port: "80,443,9000"
       action: "pass"
-      description: "Camera to NVR (Reolink ports)"
+      description: "Camera to NVR"
       sequence: 1
       log: true
     - interface: vlan20
@@ -178,7 +178,7 @@
       protocol: "tcp"
       destination_port: "8088,8043"
       action: "pass"
-      description: "Deco management by Omada (HTTP/HTTPS)"
+      description: "Network management by Omada (HTTP/HTTPS)"
       sequence: 2
       log: true
     - interface: vlan20
@@ -187,7 +187,7 @@
       protocol: "udp"
       destination_port: "27001"
       action: "pass"
-      description: "Deco management by Omada (Discovery)"
+      description: "Network management by Omada (Discovery)"
       sequence: 3
       log: false
     - interface: vlan20
@@ -196,14 +196,14 @@
       protocol: "tcp"
       destination_port: "29810-29814"
       action: "pass"
-      description: "Deco management by Omada (Management)"
+      description: "Network management by Omada (Management)"
       sequence: 4
       log: false
     - interface: vlan20
       source: "10.2.10.10"
       destination: "10.2.20.0/24"
       protocol: "tcp"
-      destination_port: "80,443,9000"
+      destination_port: "80,443,554,2020,7004,8554,9000"
       action: "pass"
       description: "Home Assistant camera integration"
       sequence: 5
@@ -214,7 +214,7 @@
       protocol: "tcp"
       destination_port: "443"
       action: "pass"
-      description: "Remote NVR access via Tailscale (Reolink app)"
+      description: "Remote NVR access via Tailscale"
       sequence: 6
       log: true
     - interface: vlan20

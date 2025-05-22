@@ -39,7 +39,21 @@ variable "target_node" {
 }
 
 variable "network_prefix" {
-  description = "Network prefix (10.1 for Tennessee, 10.2 for Primary Home)"
+  description = "Network prefix (e.g., 10.1 for site1, 10.2 for site2)"
   type        = string
-  default     = "10.1"
+}
+
+variable "site_name" {
+  description = "Short name of the site (e.g., primary, secondary)"
+  type        = string
+}
+
+variable "site_display_name" {
+  description = "Human-readable name of the site (e.g., Primary Home)"
+  type        = string
+}
+
+variable "domain" {
+  description = "Local domain name for the site (e.g., primary.local)"
+  type        = string
 }

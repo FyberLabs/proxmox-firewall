@@ -50,9 +50,12 @@ resource "proxmox_vm_qemu" "headscale_server" {
       #!/bin/bash
       set -e
 
+      # Get Ubuntu version
+      UBUNTU_VERSION=$(lsb_release -cs)
+
       # Install Headscale
-      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_VERSION}.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_VERSION}.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
       sudo apt-get update
       sudo apt-get install -y headscale
 

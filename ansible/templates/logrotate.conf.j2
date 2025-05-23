@@ -1,0 +1,19 @@
+{{ item.pattern }} {
+    daily
+    rotate {{ item.rotate | default(7) }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    {% if item.max_size is defined %}
+    size {{ item.max_size }}
+    {% endif %}
+    {% if item.max_age is defined %}
+    maxage {{ item.max_age }}
+    {% endif %}
+    sharedscripts
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate
+    endscript
+}

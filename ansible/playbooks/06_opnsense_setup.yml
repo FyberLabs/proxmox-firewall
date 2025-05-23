@@ -65,39 +65,7 @@
   tasks:
     - name: Prepare site_devices_map with port details
       ansible.builtin.set_fact:
-        site_devices_map: "{{ calculated_devices_map }}"
-      vars:
-        calculated_devices_map: |
-          {% set devices_map = {} %}
-          {% for device_name, device_attrs in (site_config.devices | default({})).items() %}
-            {% set device_type = device_attrs.type | default('generic_server') %}
-            {# Placeholder for port logic to test linter #}
-            {% set final_ports = [] %}
-            {% if device_attrs.override_ports is defined %}
-              {% set final_ports = device_attrs.override_ports %}
-            {% elif device_attrs.additional_ports is defined %}
-              {% set final_ports = final_ports + device_attrs.additional_ports %}
-            {% endif %}
-            {# Add default ports from template - simplified #}
-            {# This assumes templates/device_ports/{{ device_type }}.txt.j2 just contains a comma separated list of ports #}
-            {# {% set template_ports_str = lookup('template', 'templates/device_ports/' + device_type + '.txt.j2', errors='ignore') | default('') %}
-            {% if template_ports_str != '' %}
-              {% for p_item in template_ports_str.split(',') %}
-                {% set _ = final_ports.append({'port': p_item.strip(), 'proto': 'tcp', 'descr': 'from template'}) %}
-              {% endfor %}
-            {% endif %} #}
-
-            {% set _ = devices_map.update({
-              device_name: {
-                'ip_address': device_attrs.ip_address,
-                'vlan_id': device_attrs.vlan_id,
-                'type': device_type,
-                'ports': final_ports,
-                'mac_address': device_attrs.mac_address | default(omit) {# For reference, DHCP handles reservation #}
-              }
-            }) %}
-          {% endfor %}
-          {{ devices_map }}
+        site_devices_map: "{{ lookup('template', 'templates/device_map.j2') | from_json }}"
       when: site_config.devices is defined
 
     - name: Run initial OPNsense setup

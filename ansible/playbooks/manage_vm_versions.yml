@@ -1,0 +1,152 @@
+---
+- name: Manage VM Versions
+  hosts: proxmox
+  become: true
+  vars:
+    vm_backup_before_update: true
+    vm_update_timeout: 3600
+    vm_rollback_enabled: true
+    template_versions:
+      ubuntu:
+        url: "https://cloud-images.ubuntu.com/releases/{{ site_config.ubuntu_version }}/release/ubuntu-{{ site_config.ubuntu_version }}-server-cloudimg-amd64.img"
+        checksum_url: "https://cloud-images.ubuntu.com/releases/{{ site_config.ubuntu_version }}/release/SHA256SUMS"
+      opnsense:
+        url: "https://pkg.opnsense.org/releases/{{ site_config.opnsense_version }}/OPNsense-{{ site_config.opnsense_version }}-OpenSSL-dvd-amd64.iso"
+        checksum_url: "https://pkg.opnsense.org/releases/{{ site_config.opnsense_version }}/OPNsense-{{ site_config.opnsense_version }}-OpenSSL-dvd-amd64.iso.sha256"
+
+  tasks:
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ inventory_hostname.split('-')[0] }}.yml"
+
+    - name: Get current VM versions
+      ansible.builtin.shell: |
+        set -o pipefail
+        qm list | grep -v '^$' | tail -n +2 | awk '{print $1 "," $2 "," $3}'
+      register: vm_list
+      changed_when: false
+
+    - name: Parse VM list
+      ansible.builtin.set_fact:
+        current_vms: "{{ vm_list.stdout_lines | map('regex_replace', '^(.+),(.+),(.+)$', '{\"id\": \"\\1\", \"name\": \"\\2\", \"status\": \"\\3\"}') | map('from_json') | list }}"
+
+    - name: Check template versions
+      block:
+        - name: Get current template checksums
+          ansible.builtin.shell: |
+            set -o pipefail
+            sha256sum /var/lib/vz/template/cache/{{ item.key }}* 2>/dev/null || echo "none"
+          loop: "{{ template_versions | dict2items }}"
+          register: current_checksums
+          changed_when: false
+
+        - name: Get latest template checksums
+          ansible.builtin.uri:
+            url: "{{ item.value.checksum_url }}"
+            return_content: true
+          loop: "{{ template_versions | dict2items }}"
+          register: latest_checksums
+
+        - name: Compare template versions
+          ansible.builtin.set_fact:
+            templates_to_update: "{{ templates_to_update | default([]) + [item.key] }}"
+          loop: "{{ template_versions | dict2items }}"
+          when: >
+            current_checksums.results[loop.index0].stdout == 'none' or
+            latest_checksums.results[loop.index0].content is not regex_search(current_checksums.results[loop.index0].stdout.split()[0])
+
+    - name: Download updated templates
+      ansible.builtin.get_url:
+        url: "{{ template_versions[item].url }}"
+        dest: "/var/lib/vz/template/cache/{{ item }}"
+        checksum: "sha256:{{ latest_checksums.results[loop.index0].content.split()[0] }}"
+        mode: '0644'
+      loop: "{{ templates_to_update | default([]) }}"
+      when: templates_to_update is defined
+
+    - name: Backup VMs before update
+      block:
+        - name: Check if snapshot exists
+          ansible.builtin.shell: |
+            set -o pipefail
+            qm listsnapshot {{ item.id }} | grep -q "pre_update_$(date +%Y%m%d)"
+          loop: "{{ current_vms }}"
+          when: vm_backup_before_update and item.status == 'running'
+          register: snapshot_check
+          changed_when: false
+          failed_when: false
+
+        - name: Create backup snapshot
+          ansible.builtin.shell: |
+            set -o pipefail
+            qm snapshot {{ item.id }} pre_update_$(date +%Y%m%d_%H%M%S)
+          loop: "{{ current_vms }}"
+          when:
+            - vm_backup_before_update
+            - item.status == 'running'
+            - not snapshot_check.results[loop.index0].rc == 0
+          changed_when: true
+          register: snapshot_result
+
+    - name: Update VMs
+      block:
+        - name: Update VM templates
+          ansible.builtin.shell: |
+            set -o pipefail
+            qm set {{ item.id }} --delete {{ item.disk }} && \
+            qm importdisk {{ item.id }} /var/lib/vz/template/cache/{{ item.template }} local-lvm
+          loop: "{{ current_vms }}"
+          when: item.template is defined and item.template in templates_to_update
+          register: update_result
+          changed_when: update_result.stdout is defined
+
+        - name: Run system updates
+          ansible.builtin.shell: |
+            set -o pipefail
+            qm guest exec {{ item.id }} -- "apt-get update && apt-get upgrade -y"
+          loop: "{{ current_vms }}"
+          when: item.status == 'running'
+          register: system_update_result
+          changed_when: system_update_result.stdout is defined
+
+        - name: Run custom update scripts
+          ansible.builtin.shell: |
+            set -o pipefail
+            qm guest exec {{ item.id }} -- "{{ site_config.vm_software[item.name].update_script }}"
+          loop: "{{ current_vms }}"
+          when: >
+            item.status == 'running' and
+            site_config.vm_software is defined and
+            site_config.vm_software[item.name] is defined and
+            site_config.vm_software[item.name].update_script is defined
+          register: custom_update_result
+          changed_when: custom_update_result.stdout is defined
+
+        - name: Send update notifications
+          ansible.builtin.shell: |
+            set -o pipefail
+            echo "Updates available for {{ item.name }}: $(qm guest exec {{ item.id }} -- 'hostname')" | mail -s "VM Update Available" root
+          loop: "{{ current_vms }}"
+          when: >
+            item.status == 'running' and
+            site_config.vm_software is defined and
+            site_config.vm_software[item.name] is defined and
+            site_config.vm_software[item.name].notify_on_update | default(false)
+          register: notification_result
+          changed_when: notification_result.stdout is defined
+
+        - name: Restore from snapshot
+          ansible.builtin.shell: |
+            set -o pipefail
+            qm rollback {{ item.id }} pre_update_$(date +%Y%m%d_%H%M%S)
+          loop: "{{ update_result.results + system_update_result.results + custom_update_result.results | default([]) }}"
+          when: item.failed and vm_rollback_enabled
+          changed_when: true
+
+    - name: Clean up old snapshots
+      ansible.builtin.shell: |
+        set -o pipefail
+        qm listsnapshot {{ item.id }} | grep pre_update_ | sort -r | tail -n +4 | awk '{print $2}' | xargs -I {} qm delsnapshot {{ item.id }} {}
+      loop: "{{ current_vms }}"
+      when: item.status == 'running'
+      changed_when: true

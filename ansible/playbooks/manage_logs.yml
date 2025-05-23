@@ -1,0 +1,67 @@
+---
+- name: Manage System Logs
+  hosts: all
+  become: true
+  vars:
+    log_retention_days: 30
+    log_offload_path: "/mnt/logs/{{ inventory_hostname }}"
+    log_patterns:
+      - pattern: "*.log"
+        max_size: "100M"
+        rotate: 7
+        compress: true
+      - pattern: "*.gz"
+        max_age: "{{ log_retention_days }}d"
+      - pattern: "*.1"
+        max_age: "{{ log_retention_days }}d"
+
+  tasks:
+    - name: Install logrotate
+      ansible.builtin.apt:
+        name: logrotate
+        state: present
+        update_cache: true
+
+    - name: Create logrotate configuration
+      ansible.builtin.template:
+        src: templates/logrotate.conf.j2
+        dest: /etc/logrotate.d/{{ item.pattern | replace('*', 'all') }}
+        mode: '0644'
+      loop: "{{ log_patterns }}"
+
+    - name: Create log offload directory
+      ansible.builtin.file:
+        path: "{{ log_offload_path }}"
+        state: directory
+        mode: '0755'
+      when: log_offload_path is defined
+
+    - name: Find old log files
+      ansible.builtin.find:
+        paths:
+          - /var/log
+          - /var/log/ansible
+        patterns: "{{ item.pattern }}"
+        age: "{{ item.max_age }}"
+      loop: "{{ log_patterns }}"
+      register: old_logs
+
+    - name: Offload old logs
+      ansible.builtin.copy:
+        src: "{{ item.path }}"
+        dest: "{{ log_offload_path }}/{{ item.path | basename }}"
+        remote_src: true
+        mode: '0644'
+      loop: "{{ old_logs.results | map(attribute='files') | flatten }}"
+      when: log_offload_path is defined
+
+    - name: Remove old logs after offloading
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_logs.results | map(attribute='files') | flatten }}"
+      when: log_offload_path is defined
+
+    - name: Run logrotate
+      ansible.builtin.command: logrotate -f /etc/logrotate.conf
+      changed_when: true

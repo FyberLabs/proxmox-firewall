@@ -1,0 +1,20 @@
+{% set devices_map = {} %}
+{% for device_name, device_attrs in (site_config.devices | default({})).items() %}
+  {% set device_type = device_attrs.type | default('generic_server') %}
+  {% set final_ports = [] %}
+  {% if device_attrs.override_ports is defined %}
+    {% set final_ports = device_attrs.override_ports %}
+  {% elif device_attrs.additional_ports is defined %}
+    {% set final_ports = final_ports + device_attrs.additional_ports %}
+  {% endif %}
+  {% set _ = devices_map.update({
+    device_name: {
+      'ip_address': device_attrs.ip_address,
+      'vlan_id': device_attrs.vlan_id,
+      'type': device_type,
+      'ports': final_ports,
+      'mac_address': device_attrs.mac_address | default(omit)
+    }
+  }) %}
+{% endfor %}
+{{ devices_map }}

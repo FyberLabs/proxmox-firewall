@@ -42,7 +42,7 @@
 ## Documentation
 
 - Update README.md to mention single/multifirewall and remove specific references to Tennesee home, Primary Home, and specific devices, hubs, nvr, etc. as we have those as optional devices now.
-- Create a sample network diagram showing VLANs and example devices
+- Create some sample mermaid network diagrams showing VLANs and example devices
 
 ## Networking
 
@@ -67,20 +67,22 @@
 - ✅ Automatically get latest Ubuntu base for VMs
 - ✅ Automatically get latest Omada
 - ✅ Automatically get latest zeek, pangolin, headscale, etc.
-- Setup ansible for log/metric offloading/rotation/trim, system recovery, removing VM templates, etc.
-- Script to update/redeploy/reconfigure new VM versions
+- ✅  Setup ansible for log/metric offloading/rotation/trim, system recovery, removing VM templates, etc.
+- ✅  Script to update/redeploy/reconfigure new VM versions
 - ✅ Verify backup configuration works with both NFS and CIFS
 - ✅ Add CEPH blob backup support?
+- ✅ VM_software needs reworked as packages should be updating and only install script software needs help updating.  Also version updating notifications.
+- Develop the update scripts for the non-package repo VM software.
+- Setup self-running/hosted ansible in proxmox for the various maintenance scritps?
 
 ## Multi-Site Improvements
 
-- Create site transition script to migrate from hardcoded to dynamic config
 - Update README with multi-site deployment instructions
 - Create test suite for multi-site deployment
 - Add support for different hardware configurations per site
 - Support different network topologies per site
-- Create global network sharing ansible for connecting networks by tailscale (terraform), headscale(terraform), and netbird(terraform) depending on site and a yet to be specified global network config.
-- Support self-hosted VPN - Specify DMZ, DMZ VM, cloud VM for headscale or self hosted netbird.
+- Create global network sharing ansible examples for connecting networks by tailscale (terraform), headscale(terraform), and netbird(terraform) depending on site and a yet to be specified global network config.
+- Support self-hosted VPN control plane/DNS - Specify DMZ, DMZ VM, cloud VM for headscale or self hosted netbird.
 
 ## Validation Tests
 

@@ -909,3 +909,13 @@ tail -f /var/log/backup_cleanup.log
 # View the latest cleanup report
 ls -t /var/log/backup_cleanup_*.log | head -n1 | xargs cat
 ```
+
+### Automation
+
+The project includes several automation features:
+
+- Automatic template updates for Ubuntu and OPNsense
+- VM software version tracking and updates (see [VM Software Configuration](ansible/README.md#vm-software-configuration))
+- Log rotation and cleanup
+- Backup verification and management
+- System recovery procedures

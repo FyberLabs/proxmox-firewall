@@ -1,0 +1,136 @@
+---
+- name: Test Backup Verification
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test Proxmox Backup Status
+      block:
+        - name: Check Backup Service
+          ansible.builtin.shell: |
+            systemctl status pbsd
+          register: backup_service
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_service.rc == 0
+
+        - name: Verify Backup Storage
+          ansible.builtin.shell: |
+            pvesm status | grep -q "backup"
+          register: backup_storage
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_storage.rc == 0
+
+    - name: Test VM Backups
+      block:
+        - name: List VM Backups
+          ansible.builtin.shell: |
+            vzdump --list
+          register: vm_backups
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_backups.rc == 0
+
+        - name: Verify Backup Integrity
+          ansible.builtin.shell: |
+            vzdump --verify {{ item }}
+          with_items: "{{ vm_backups.stdout_lines }}"
+          register: backup_integrity
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_integrity.rc == 0
+
+    - name: Test Backup Retention
+      block:
+        - name: Check Backup Age
+          ansible.builtin.shell: |
+            find /var/lib/vz/dump -type f -mtime +{{ backup_retention_days }} -name "*.vma.gz"
+          register: old_backups
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: old_backups.rc == 0
+
+        - name: Verify Retention Policy
+          ansible.builtin.shell: |
+            pvesm status | grep -q "retention"
+          register: retention_policy
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: retention_policy.rc == 0
+
+    - name: Test Backup Performance
+      block:
+        - name: Measure Backup Speed
+          ansible.builtin.shell: |
+            time vzdump {{ item }} --compress zstd
+          with_items: "{{ vms_to_backup }}"
+          register: backup_speed
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_speed.rc == 0
+
+        - name: Check Backup Size
+          ansible.builtin.shell: |
+            du -sh /var/lib/vz/dump/*.vma.gz
+          register: backup_size
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_size.rc == 0
+
+    - name: Test Backup Recovery
+      block:
+        - name: Create Test VM
+          ansible.builtin.shell: |
+            qm create 999 --memory 512 --net0 virtio,bridge=vmbr0
+          register: test_vm
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: test_vm.rc == 0
+
+        - name: Restore Test Backup
+          ansible.builtin.shell: |
+            vzdump --restore {{ item }} 999
+          with_items: "{{ vm_backups.stdout_lines }}"
+          register: backup_restore
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_restore.rc == 0
+
+        - name: Verify Restored VM
+          ansible.builtin.shell: |
+            qm status 999
+          register: restored_vm
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: restored_vm.rc == 0
+
+        - name: Cleanup Test VM
+          ansible.builtin.shell: |
+            qm destroy 999
+          register: cleanup_vm
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: cleanup_vm.rc == 0
+
+    - name: Test Backup Notifications
+      block:
+        - name: Check Notification Service
+          ansible.builtin.shell: |
+            systemctl status notify-backup
+          register: notification_service
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: notification_service.rc == 0
+
+        - name: Verify Notification Logs
+          ansible.builtin.shell: |
+            tail -n 100 /var/log/notify-backup.log | grep -q "backup"
+          register: notification_logs
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: notification_logs.rc == 0

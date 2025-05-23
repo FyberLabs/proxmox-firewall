@@ -1,0 +1,122 @@
+---
+- name: Test VPN Connectivity
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test Tailscale Status
+      block:
+        - name: Check Tailscale Status
+          ansible.builtin.shell: |
+            tailscale status
+          register: tailscale_status
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: tailscale_status.rc == 0
+
+        - name: Verify Tailscale Subnet Routes
+          ansible.builtin.shell: |
+            tailscale status | grep -q "{{ site_config.network_prefix }}.0.0/16"
+          register: subnet_routes
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: subnet_routes.rc == 0
+
+    - name: Test Cross-Site VPN Connectivity
+      block:
+        - name: Test VPN Ping to Other Sites
+          ansible.builtin.ping:
+            host: "{{ item }}"
+            timeout: "{{ test_timeout }}"
+          with_items: "{{ global_network.vpn.peers }}"
+          register: vpn_ping
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_ping is success
+
+        - name: Test VPN Routing
+          ansible.builtin.shell: |
+            traceroute -n {{ item }}
+          with_items: "{{ global_network.vpn.peers }}"
+          register: vpn_routing
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_routing.rc == 0
+
+    - name: Test VPN Service Access
+      block:
+        - name: Test Cross-Site Service Access
+          ansible.builtin.uri:
+            url: "https://{{ item }}:8123"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+            validate_certs: false
+          with_items: "{{ global_network.vpn.services }}"
+          register: vpn_services
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_services is success
+
+    - name: Test VPN Failover
+      block:
+        - name: Simulate Primary WAN Failure
+          ansible.builtin.shell: |
+            ip link set {{ site_config.network.wan_primary }} down
+          register: wan_down
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: wan_down.rc == 0
+
+        - name: Wait for VPN Failover
+          ansible.builtin.wait_for:
+            timeout: 30
+
+        - name: Verify VPN Still Works
+          ansible.builtin.ping:
+            host: "{{ global_network.vpn.peers[0] }}"
+            timeout: "{{ test_timeout }}"
+          register: vpn_failover
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_failover is success
+
+        - name: Restore Primary WAN
+          ansible.builtin.shell: |
+            ip link set {{ site_config.network.wan_primary }} up
+          register: wan_up
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: wan_up.rc == 0
+
+    - name: Test VPN ACLs
+      block:
+        - name: Test Allowed VPN Access
+          ansible.builtin.uri:
+            url: "https://{{ item }}:445"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+            validate_certs: false
+          with_items: "{{ global_network.vpn.allowed_services }}"
+          register: vpn_allowed
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_allowed is success
+
+        - name: Test Blocked VPN Access
+          ansible.builtin.uri:
+            url: "https://{{ item }}:445"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+            validate_certs: false
+          with_items: "{{ global_network.vpn.blocked_services }}"
+          register: vpn_blocked
+          failed_when: vpn_blocked is success
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"

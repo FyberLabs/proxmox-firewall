@@ -1,0 +1,167 @@
+---
+- name: Test Cross-Site Connectivity
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test Cross-Site VPN
+      block:
+        - name: Check VPN Status
+          ansible.builtin.shell: |
+            tailscale status
+          register: vpn_status
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_status.rc == 0
+
+        - name: Verify VPN Routes
+          ansible.builtin.shell: |
+            tailscale status | grep -E "{{ global_network.vpn.routes | join('|') }}"
+          register: vpn_routes
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vpn_routes.rc == 0
+
+    - name: Test Cross-Site Service Access
+      block:
+        - name: Test Home Assistant Access
+          ansible.builtin.uri:
+            url: "http://{{ item }}:8123"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+          with_items: "{{ global_network.vpn.services.homeassistant }}"
+          register: ha_access
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: ha_access is success
+
+        - name: Test NAS Access
+          ansible.builtin.uri:
+            url: "smb://{{ item }}"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+          with_items: "{{ global_network.vpn.services.nas }}"
+          register: nas_access
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: nas_access is success
+
+    - name: Test Cross-Site DNS
+      block:
+        - name: Test Cross-Site DNS Resolution
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 {{ item }}.{{ global_network.dns.domain }} +short
+          with_items: "{{ global_network.dns.records }}"
+          register: cross_site_dns
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: cross_site_dns.rc == 0
+
+        - name: Verify DNS Forwarding
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 {{ item }}.{{ global_network.dns.domain }} +trace
+          with_items: "{{ global_network.dns.records }}"
+          register: dns_forwarding
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dns_forwarding.rc == 0
+
+    - name: Test Cross-Site Routing
+      block:
+        - name: Test Route Advertisement
+          ansible.builtin.shell: |
+            tailscale status | grep -q "{{ site_config.network_prefix }}.0.0/16"
+          register: route_advertisement
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: route_advertisement.rc == 0
+
+        - name: Test Route Acceptance
+          ansible.builtin.shell: |
+            ip route show | grep -q "{{ item }}"
+          with_items: "{{ global_network.vpn.routes }}"
+          register: route_acceptance
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: route_acceptance.rc == 0
+
+    - name: Test Cross-Site Security
+      block:
+        - name: Test ACL Enforcement
+          ansible.builtin.uri:
+            url: "https://{{ item }}:445"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+          with_items: "{{ global_network.vpn.blocked_services }}"
+          register: acl_enforcement
+          failed_when: acl_enforcement is success
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+
+        - name: Test Firewall Rules
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "{{ item }}"
+          with_items: "{{ global_network.vpn.firewall_rules }}"
+          register: firewall_rules
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: firewall_rules.rc == 0
+
+    - name: Test Cross-Site Performance
+      block:
+        - name: Measure Latency
+          ansible.builtin.shell: |
+            ping -c 5 {{ item }}
+          with_items: "{{ global_network.vpn.peers }}"
+          register: latency_test
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: latency_test.rc == 0
+
+        - name: Test Bandwidth
+          ansible.builtin.shell: |
+            iperf3 -c {{ item }} -t 10
+          with_items: "{{ global_network.vpn.peers }}"
+          register: bandwidth_test
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: bandwidth_test.rc == 0
+
+    - name: Test Cross-Site Failover
+      block:
+        - name: Simulate Primary WAN Failure
+          ansible.builtin.shell: |
+            ip link set {{ site_config.network.wan_primary }} down
+          register: wan_down
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: wan_down.rc == 0
+
+        - name: Wait for Failover
+          ansible.builtin.wait_for:
+            timeout: 30
+
+        - name: Verify Cross-Site Connectivity
+          ansible.builtin.ping:
+            host: "{{ item }}"
+            timeout: "{{ test_timeout }}"
+          with_items: "{{ global_network.vpn.peers }}"
+          register: failover_test
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: failover_test is success
+
+        - name: Restore Primary WAN
+          ansible.builtin.shell: |
+            ip link set {{ site_config.network.wan_primary }} up
+          register: wan_up
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: wan_up.rc == 0

@@ -1,0 +1,129 @@
+---
+- name: Test DNS Resolution
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test Local DNS Server
+      block:
+        - name: Check DNS Server Status
+          ansible.builtin.shell: |
+            systemctl status unbound
+          register: dns_status
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dns_status.rc == 0
+
+        - name: Verify DNS Server Configuration
+          ansible.builtin.shell: |
+            unbound-checkconf /etc/unbound/unbound.conf
+          register: dns_config
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dns_config.rc == 0
+
+    - name: Test Local Domain Resolution
+      block:
+        - name: Test Local Domain A Records
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 {{ item }}.{{ site_config.domain }} +short
+          with_items:
+            - "homeassistant"
+            - "omada"
+            - "opnsense"
+            - "nas"
+          register: local_a_records
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: local_a_records.rc == 0
+
+        - name: Test Local Domain PTR Records
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 -x {{ item }} +short
+          with_items:
+            - "{{ site_config.network_prefix }}.10.10"
+            - "{{ site_config.network_prefix }}.50.2"
+            - "{{ site_config.network_prefix }}.50.1"
+            - "{{ site_config.network_prefix }}.10.100"
+          register: local_ptr_records
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: local_ptr_records.rc == 0
+
+    - name: Test External DNS Resolution
+      block:
+        - name: Test External Domain Resolution
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 {{ item }} +short
+          with_items:
+            - "google.com"
+            - "cloudflare.com"
+            - "github.com"
+          register: external_dns
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: external_dns.rc == 0
+
+        - name: Test DNS Caching
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 google.com +short
+            time dig @{{ site_config.network_prefix }}.50.1 google.com +short
+          register: dns_cache
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dns_cache.rc == 0
+
+    - name: Test DNS Failover
+      block:
+        - name: Test Primary DNS Server
+          ansible.builtin.shell: |
+            dig @1.1.1.1 google.com +short
+          register: primary_dns
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: primary_dns.rc == 0
+
+        - name: Test Backup DNS Server
+          ansible.builtin.shell: |
+            dig @8.8.8.8 google.com +short
+          register: backup_dns
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_dns.rc == 0
+
+    - name: Test DNS Security
+      block:
+        - name: Test DNSSEC Validation
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 google.com +dnssec
+          register: dnssec_test
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dnssec_test.rc == 0
+
+        - name: Test DNS Blocking
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 {{ item }} +short
+          with_items:
+            - "malware.com"
+            - "ads.example.com"
+          register: dns_blocking
+          failed_when: dns_blocking.rc == 0
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+
+    - name: Test DNS Performance
+      block:
+        - name: Measure DNS Response Time
+          ansible.builtin.shell: |
+            for i in {1..5}; do
+              time dig @{{ site_config.network_prefix }}.50.1 google.com +short > /dev/null
+            done
+          register: dns_performance
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dns_performance.rc == 0

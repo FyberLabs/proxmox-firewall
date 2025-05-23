@@ -1,0 +1,153 @@
+---
+- name: Test Firewall Rules
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test OPNsense Service Status
+      block:
+        - name: Check OPNsense Status
+          ansible.builtin.shell: |
+            pfctl -s info
+          register: opnsense_status
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: opnsense_status.rc == 0
+
+        - name: Verify Required Packages
+          ansible.builtin.shell: |
+            pkg info | grep -E "os-tailscale|os-theme-vicuna|os-wireguard"
+          register: required_packages
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: required_packages.rc == 0
+
+    - name: Test Firewall Rules
+      block:
+        - name: Test WAN Rules
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "block in on \$wan"
+          register: wan_rules
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: wan_rules.rc == 0
+
+        - name: Test VLAN Rules
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "block in on \$vlan20"
+          register: vlan_rules
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vlan_rules.rc == 0
+
+    - name: Test NAT Rules
+      block:
+        - name: Verify NAT Configuration
+          ansible.builtin.shell: |
+            pfctl -s nat
+          register: nat_rules
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: nat_rules.rc == 0
+
+        - name: Test WAN Failover NAT
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "rdr on \$wan"
+          register: failover_nat
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: failover_nat.rc == 0
+
+    - name: Test VLAN Isolation
+      block:
+        - name: Test Guest VLAN Isolation
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "block in on \$vlan40"
+          register: guest_isolation
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: guest_isolation.rc == 0
+
+        - name: Test IoT VLAN Isolation
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "block in on \$vlan30"
+          register: iot_isolation
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: iot_isolation.rc == 0
+
+    - name: Test Service Access Rules
+      block:
+        - name: Test Home Assistant Access
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "pass in on \$vlan10 to \$vlan30"
+          register: ha_access
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: ha_access.rc == 0
+
+        - name: Test Camera Access
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "pass in on \$vlan20 to \$vlan20"
+          register: camera_access
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: camera_access.rc == 0
+
+    - name: Test Tailscale Integration
+      block:
+        - name: Verify Tailscale Rules
+          ansible.builtin.shell: |
+            pfctl -s rules | grep -q "pass in on \$tailscale"
+          register: tailscale_rules
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: tailscale_rules.rc == 0
+
+        - name: Test Tailscale Subnet Routes
+          ansible.builtin.shell: |
+            pfctl -s routes | grep -q "{{ site_config.network_prefix }}.0.0/16"
+          register: tailscale_routes
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: tailscale_routes.rc == 0
+
+    - name: Test Firewall Logging
+      block:
+        - name: Check Firewall Logs
+          ansible.builtin.shell: |
+            tail -n 100 /var/log/filter.log
+          register: firewall_logs
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: firewall_logs.rc == 0
+
+        - name: Verify Log Rotation
+          ansible.builtin.shell: |
+            ls -l /var/log/filter.log.*
+          register: log_rotation
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: log_rotation.rc == 0
+
+    - name: Test Firewall Performance
+      block:
+        - name: Check Firewall Statistics
+          ansible.builtin.shell: |
+            pfctl -s info | grep -E "states|memory"
+          register: firewall_stats
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: firewall_stats.rc == 0
+
+        - name: Monitor Firewall CPU Usage
+          ansible.builtin.shell: |
+            top -b -n 1 | grep pfctl
+          register: firewall_cpu
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: firewall_cpu.rc == 0

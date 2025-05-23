@@ -1,0 +1,161 @@
+---
+- name: Test VM States
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test Proxmox API Access
+      block:
+        - name: Check Proxmox API
+          ansible.builtin.uri:
+            url: "https://{{ site_config.network_prefix }}.50.1:8006/api2/json/version"
+            method: GET
+            user: "{{ proxmox_api_user }}"
+            password: "{{ proxmox_api_token }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: proxmox_api
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: proxmox_api.status == 200
+
+    - name: Test VM States
+      block:
+        - name: Check VM Status
+          ansible.builtin.shell: |
+            qm list
+          register: vm_list
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_list.rc == 0
+
+        - name: Verify Required VMs
+          ansible.builtin.shell: |
+            qm list | grep -E "opnsense|omada|homeassistant|zeek"
+          register: required_vms
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: required_vms.rc == 0
+
+    - name: Test VM Resources
+      block:
+        - name: Check VM CPU Usage
+          ansible.builtin.shell: |
+            qm status {{ item }} | grep "cpu"
+          with_items: "{{ site_config.vms }}"
+          register: vm_cpu
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_cpu.rc == 0
+
+        - name: Check VM Memory Usage
+          ansible.builtin.shell: |
+            qm status {{ item }} | grep "memory"
+          with_items: "{{ site_config.vms }}"
+          register: vm_memory
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_memory.rc == 0
+
+    - name: Test VM Network
+      block:
+        - name: Check VM Network Interfaces
+          ansible.builtin.shell: |
+            qm config {{ item }} | grep "net"
+          with_items: "{{ site_config.vms }}"
+          register: vm_network
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_network.rc == 0
+
+        - name: Verify VLAN Configuration
+          ansible.builtin.shell: |
+            qm config {{ item }} | grep "vlan"
+          with_items: "{{ site_config.vms }}"
+          register: vm_vlan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_vlan.rc == 0
+
+    - name: Test VM Storage
+      block:
+        - name: Check VM Disk Usage
+          ansible.builtin.shell: |
+            qm status {{ item }} | grep "disk"
+          with_items: "{{ site_config.vms }}"
+          register: vm_disk
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_disk.rc == 0
+
+        - name: Verify Backup Configuration
+          ansible.builtin.shell: |
+            qm config {{ item }} | grep "backup"
+          with_items: "{{ site_config.vms }}"
+          register: vm_backup
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_backup.rc == 0
+
+    - name: Test VM Templates
+      block:
+        - name: Check Template Status
+          ansible.builtin.shell: |
+            qm list | grep "template"
+          register: vm_templates
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_templates.rc == 0
+
+        - name: Verify Template Versions
+          ansible.builtin.shell: |
+            qm config {{ item }} | grep "version"
+          with_items: "{{ site_config.templates }}"
+          register: template_versions
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: template_versions.rc == 0
+
+    - name: Test VM Snapshots
+      block:
+        - name: Check Snapshot Configuration
+          ansible.builtin.shell: |
+            qm listsnapshot {{ item }}
+          with_items: "{{ site_config.vms }}"
+          register: vm_snapshots
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_snapshots.rc == 0
+
+        - name: Verify Snapshot Retention
+          ansible.builtin.shell: |
+            qm listsnapshot {{ item }} | grep -c "pre_update"
+          with_items: "{{ site_config.vms }}"
+          register: snapshot_retention
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: snapshot_retention.rc == 0
+
+    - name: Test VM Performance
+      block:
+        - name: Check VM Load
+          ansible.builtin.shell: |
+            qm status {{ item }} | grep "load"
+          with_items: "{{ site_config.vms }}"
+          register: vm_load
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_load.rc == 0
+
+        - name: Monitor VM IO
+          ansible.builtin.shell: |
+            qm status {{ item }} | grep "io"
+          with_items: "{{ site_config.vms }}"
+          register: vm_io
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: vm_io.rc == 0

@@ -919,3 +919,283 @@ The project includes several automation features:
 - Log rotation and cleanup
 - Backup verification and management
 - System recovery procedures
+
+## Multi-Site Deployment
+
+This project supports deploying multiple sites with different configurations. Each site can have its own:
+- Network topology
+- Hardware configuration
+- VPN solution (Tailscale, Headscale, or Netbird)
+- DNS configuration
+
+### Site Configuration
+
+1. Create a new site configuration:
+   ```bash
+   ./scripts/create_site_config.sh
+   ```
+   This will:
+   - Generate a unique site name and network prefix
+   - Create site-specific configuration files
+   - Set up Terraform state for the site
+   - Configure network ranges and VLANs
+
+2. Configure site-specific settings in `config/<site_name>.conf`:
+   ```yaml
+   site:
+     name: "site_name"
+     network_prefix: "10.x"  # Unique for each site
+     domain: "site.local"
+     hardware:
+       cpu: "n100"  # or n305
+       memory: "8gb"  # or 16gb
+       storage: "128gb"  # or 256gb, 512gb
+       network:
+         - type: "2.5gbe"
+           count: 2
+         - type: "10gbe"
+           count: 2
+     vpn:
+       type: "tailscale"  # or headscale, netbird
+       self_hosted: false  # true for headscale/netbird
+       control_plane: "cloud"  # or self-hosted
+     dns:
+       type: "local"  # or cloud
+       provider: "unbound"  # or cloudflare, etc.
+   ```
+
+3. Configure network topology in `config/network/<site_name>.yml`:
+   ```yaml
+   network:
+     topology: "standard"  # or custom
+     vlans:
+       - id: 10
+         name: "main"
+         subnet: "10.x.10.0/24"
+       - id: 20
+         name: "cameras"
+         subnet: "10.x.20.0/24"
+       # Add more VLANs as needed
+     routing:
+       type: "static"  # or dynamic
+       ospf:
+         enabled: false
+         area: "0.0.0.0"
+   ```
+
+### Global Network Configuration
+
+1. Configure global network settings in `config/global_network.yml`:
+   ```yaml
+   global_network:
+     vpn:
+       type: "tailscale"  # or headscale, netbird
+       self_hosted: false
+       control_plane: "cloud"
+       acls:
+         - action: "accept"
+           src: ["10.1.0.0/16", "10.2.0.0/16"]
+           dst: ["10.1.10.100:445", "10.2.10.100:445"]
+     dns:
+       type: "local"
+       provider: "unbound"
+       zones:
+         - name: "site1.local"
+           records:
+             - name: "homeassistant"
+               type: "A"
+               value: "10.1.10.10"
+         - name: "site2.local"
+           records:
+             - name: "homeassistant"
+               type: "A"
+               value: "10.2.10.10"
+   ```
+
+2. Deploy global network configuration:
+   ```bash
+   # Deploy VPN configuration
+   ansible-playbook ansible/playbooks/deploy_global_vpn.yml
+
+   # Deploy DNS configuration
+   ansible-playbook ansible/playbooks/deploy_global_dns.yml
+   ```
+
+### Hardware-Specific Configuration
+
+1. Configure hardware-specific settings in `config/hardware/<site_name>.yml`:
+   ```yaml
+   hardware:
+     cpu:
+       type: "n100"  # or n305
+       cores: 4
+       threads: 4
+     memory:
+       total: "8gb"  # or 16gb
+       vm_allocation:
+         opnsense: "4gb"
+         omada: "2gb"
+         homeassistant: "2gb"
+     storage:
+       type: "ssd"
+       size: "128gb"  # or 256gb, 512gb
+       allocation:
+         system: "20gb"
+         vms: "80gb"
+         backups: "28gb"
+     network:
+       interfaces:
+         - name: "eth0"
+           type: "2.5gbe"
+           role: "wan"
+         - name: "eth1"
+           type: "2.5gbe"
+           role: "wan_backup"
+         - name: "eth2"
+           type: "10gbe"
+           role: "lan"
+         - name: "eth3"
+           type: "10gbe"
+           role: "cameras"
+   ```
+
+2. Deploy hardware-specific configuration:
+   ```bash
+   ansible-playbook ansible/playbooks/deploy_hardware_config.yml --limit=<site_name>
+   ```
+
+### Testing Multi-Site Deployment
+
+1. Run the test suite:
+   ```bash
+   # Test all sites
+   ./scripts/test_multi_site.sh
+
+   # Test specific site
+   ./scripts/test_multi_site.sh <site_name>
+   ```
+
+2. Verify connectivity:
+   ```bash
+   # Test cross-site routing
+   ansible-playbook ansible/playbooks/test_network_connectivity.yml
+
+   # Test VPN connectivity
+   ansible-playbook ansible/playbooks/test_vpn_connectivity.yml
+
+   # Test DNS resolution
+   ansible-playbook ansible/playbooks/test_dns_resolution.yml
+   ```
+
+### Self-Hosted VPN Control Plane
+
+For sites using self-hosted VPN solutions (Headscale or Netbird):
+
+1. Configure control plane VM:
+   ```yaml
+   vpn_control_plane:
+     type: "headscale"  # or netbird
+     vm:
+       name: "vpn-control"
+       cpu: 2
+       memory: "2gb"
+       disk: "20gb"
+     network:
+       vlan: 50
+       ip: "10.x.50.10"
+     dns:
+       enabled: true
+       provider: "unbound"
+   ```
+
+2. Deploy control plane:
+   ```bash
+   ansible-playbook ansible/playbooks/deploy_vpn_control_plane.yml --limit=<site_name>
+   ```
+
+## Test Suite
+
+The project includes a comprehensive test suite for validating multi-site deployments. The test suite ensures that all components of the system are functioning correctly and that sites can communicate with each other as expected.
+
+### Test Components
+
+The test suite consists of the following playbooks:
+
+1. **Network Connectivity Tests** (`test_network_connectivity.yml`)
+   - Tests WAN connectivity (primary and backup)
+   - Validates VLAN connectivity and isolation
+   - Verifies service accessibility
+   - Tests DNS resolution and DHCP functionality
+
+2. **VPN Connectivity Tests** (`test_vpn_connectivity.yml`)
+   - Validates Tailscale status and routes
+   - Tests cross-site VPN connectivity
+   - Verifies service access across sites
+   - Tests VPN failover and ACLs
+
+3. **DNS Resolution Tests** (`test_dns_resolution.yml`)
+   - Tests local DNS server status and configuration
+   - Validates local domain records (A and PTR)
+   - Tests external domain resolution
+   - Verifies DNS failover and security features
+
+4. **Firewall Rules Tests** (`test_firewall_rules.yml`)
+   - Tests OPNsense service status
+   - Validates WAN and VLAN rules
+   - Tests NAT rules and VLAN isolation
+   - Verifies service access rules and Tailscale integration
+
+5. **VM State Tests** (`test_vm_states.yml`)
+   - Tests Proxmox API access
+   - Validates VM states and resources
+   - Tests VM network configurations
+   - Verifies VM storage, templates, and snapshots
+
+6. **Cross-Site Connectivity Tests** (`test_cross_site_connectivity.yml`)
+   - Tests cross-site VPN connectivity
+   - Validates cross-site service access
+   - Tests cross-site DNS and routing
+   - Verifies cross-site security and performance
+
+7. **Backup Verification Tests** (`test_backup_verification.yml`)
+   - Tests Proxmox backup status
+   - Validates VM backups and integrity
+   - Tests backup retention and performance
+   - Verifies backup recovery and notifications
+
+### Running Tests
+
+The test suite can be run using the `run_test_suite.sh` script:
+
+```bash
+# Test all sites
+./scripts/run_test_suite.sh
+
+# Test specific site
+./scripts/run_test_suite.sh site1
+```
+
+The script will:
+1. Run all test playbooks in sequence
+2. Provide colored output for test status
+3. Report success/failure for each test
+4. Exit with appropriate status code (0 for success, 1 for failure)
+
+### Test Configuration
+
+Each test playbook uses the following configuration:
+- `test_timeout`: Timeout for individual tests (default: 5 seconds)
+- `test_retries`: Number of retry attempts (default: 3)
+- `test_delay`: Delay between retries (default: 2 seconds)
+
+These values can be adjusted in the playbook variables if needed.
+
+### Test Results
+
+The test suite provides detailed output for each test:
+- ✅ Success: Test completed successfully
+- ❌ Failure: Test failed with error details
+- ⚠️ Warning: Test completed with warnings
+- ℹ️ Info: Additional test information
+
+Failed tests will include error messages and relevant logs to help diagnose issues.

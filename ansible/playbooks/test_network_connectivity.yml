@@ -1,0 +1,167 @@
+---
+- name: Test Network Connectivity
+  hosts: all
+  gather_facts: true
+  vars:
+    test_timeout: 5
+    test_retries: 3
+    test_delay: 2
+
+  tasks:
+    - name: Test WAN Connectivity
+      block:
+        - name: Test primary WAN
+          ansible.builtin.uri:
+            url: "https://1.1.1.1"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+          register: primary_wan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: primary_wan is success
+
+        - name: Test backup WAN
+          ansible.builtin.uri:
+            url: "https://8.8.8.8"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+          register: backup_wan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: backup_wan is success
+
+    - name: Test VLAN Connectivity
+      block:
+        - name: Test Main LAN (VLAN 10)
+          ansible.builtin.ping:
+            host: "{{ item }}"
+            timeout: "{{ test_timeout }}"
+          with_items:
+            - "{{ site_config.network_prefix }}.10.1"
+            - "{{ site_config.network_prefix }}.10.10"
+            - "{{ site_config.network_prefix }}.10.100"
+          register: main_lan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: main_lan is success
+
+        - name: Test Camera VLAN (VLAN 20)
+          ansible.builtin.ping:
+            host: "{{ item }}"
+            timeout: "{{ test_timeout }}"
+          with_items:
+            - "{{ site_config.network_prefix }}.20.2"
+            - "{{ site_config.network_prefix }}.20.3"
+          register: camera_lan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: camera_lan is success
+
+        - name: Test IoT VLAN (VLAN 30)
+          ansible.builtin.ping:
+            host: "{{ site_config.network_prefix }}.30.1"
+            timeout: "{{ test_timeout }}"
+          register: iot_lan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: iot_lan is success
+
+        - name: Test Management VLAN (VLAN 50)
+          ansible.builtin.ping:
+            host: "{{ item }}"
+            timeout: "{{ test_timeout }}"
+          with_items:
+            - "{{ site_config.network_prefix }}.50.1"
+            - "{{ site_config.network_prefix }}.50.2"
+            - "{{ site_config.network_prefix }}.50.3"
+          register: mgmt_lan
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: mgmt_lan is success
+
+    - name: Test VLAN Isolation
+      block:
+        - name: Test Guest VLAN Isolation
+          ansible.builtin.ping:
+            host: "{{ site_config.network_prefix }}.10.1"
+            timeout: "{{ test_timeout }}"
+          register: guest_isolation
+          failed_when: guest_isolation is success
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+
+        - name: Test IoT VLAN Isolation
+          ansible.builtin.ping:
+            host: "{{ site_config.network_prefix }}.10.1"
+            timeout: "{{ test_timeout }}"
+          register: iot_isolation
+          failed_when: iot_isolation is success
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+
+    - name: Test Service Connectivity
+      block:
+        - name: Test OPNsense Web Interface
+          ansible.builtin.uri:
+            url: "https://{{ site_config.network_prefix }}.50.1"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+            validate_certs: false
+          register: opnsense_web
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: opnsense_web is success
+
+        - name: Test Omada Controller
+          ansible.builtin.uri:
+            url: "https://{{ site_config.network_prefix }}.50.2:8043"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+            validate_certs: false
+          register: omada_web
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: omada_web is success
+
+        - name: Test Home Assistant
+          ansible.builtin.uri:
+            url: "http://{{ site_config.network_prefix }}.10.10:8123"
+            method: GET
+            timeout: "{{ test_timeout }}"
+            status_code: [200, 301, 302]
+          register: homeassistant_web
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: homeassistant_web is success
+
+    - name: Test DNS Resolution
+      block:
+        - name: Test Local DNS Resolution
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 {{ site_config.domain }} +short
+          register: local_dns
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: local_dns.rc == 0
+
+        - name: Test External DNS Resolution
+          ansible.builtin.shell: |
+            dig @{{ site_config.network_prefix }}.50.1 google.com +short
+          register: external_dns
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: external_dns.rc == 0
+
+    - name: Test DHCP Functionality
+      block:
+        - name: Test DHCP Server
+          ansible.builtin.shell: |
+            dhclient -v -d -1
+          register: dhcp_test
+          retries: "{{ test_retries }}"
+          delay: "{{ test_delay }}"
+          until: dhcp_test.rc == 0

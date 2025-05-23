@@ -77,8 +77,8 @@
 
 ## Multi-Site Improvements
 
-- Update README with multi-site deployment instructions
-- Create test suite for multi-site deployment
+- ✅ Update README with multi-site deployment instructions
+- ✅ Create test suite for multi-site deployment
 - Add support for different hardware configurations per site
 - Support different network topologies per site
 - Create global network sharing ansible examples for connecting networks by tailscale (terraform), headscale(terraform), and netbird(terraform) depending on site and a yet to be specified global network config.
@@ -87,45 +87,45 @@
 ## Validation Tests
 
 ### Firewall State Validation
-- Test OPNsense service status and configuration
-  - Verify all required packages are installed (os-tailscale, os-theme-vicuna, os-wireguard)
-  - Check firewall rules are properly applied
-  - Validate NAT rules for WAN failover
-  - Verify DNS resolver configuration
-  - Check DHCP server status and leases
-  - Validate VLAN configuration and tagging
+- ✅ Test OPNsense service status and configuration
+  - ✅ Verify all required packages are installed (os-tailscale, os-theme-vicuna, os-wireguard)
+  - ✅ Check firewall rules are properly applied
+  - ✅ Validate NAT rules for WAN failover
+  - ✅ Verify DNS resolver configuration
+  - ✅ Check DHCP server status and leases
+  - ✅ Validate VLAN configuration and tagging
 
 ### VM State Validation
-- Test Proxmox VM states
-  - Verify all VMs are running with correct resources
-  - Check cloud-init configuration
-  - Validate network interface assignments
-  - Test VM template versions and updates
-  - Verify backup configuration
+- ✅ Test Proxmox VM states
+  - ✅ Verify all VMs are running with correct resources
+  - ✅ Check cloud-init configuration
+  - ✅ Validate network interface assignments
+  - ✅ Test VM template versions and updates
+  - ✅ Verify backup configuration
 
 ### Network Connectivity Tests
-- Test from inside OPNsense
-  - Verify WAN connectivity (both primary and failover)
-  - Test VLAN routing and isolation
-  - Validate DNS resolution
-  - Check DHCP server functionality
-  - Test firewall rule effectiveness
-  - Verify Tailscale subnet routing
+- ✅ Test from inside OPNsense
+  - ✅ Verify WAN connectivity (both primary and failover)
+  - ✅ Test VLAN routing and isolation
+  - ✅ Validate DNS resolution
+  - ✅ Check DHCP server functionality
+  - ✅ Test firewall rule effectiveness
+  - ✅ Verify Tailscale subnet routing
 
-- Test from localhost to services
-  - Verify SSH access to all VMs
-  - Test web interface access (OPNsense, Omada)
-  - Validate service ports (Home Assistant, NAS, etc.)
-  - Check Tailscale connectivity
-  - Test cross-site routing
+- ✅ Test from localhost to services
+  - ✅ Verify SSH access to all VMs
+  - ✅ Test web interface access (OPNsense, Omada)
+  - ✅ Validate service ports (Home Assistant, NAS, etc.)
+  - ✅ Check Tailscale connectivity
+  - ✅ Test cross-site routing
 
 ### Security Validation
-- Verify firewall rules
-  - Test VLAN isolation
-  - Validate service access restrictions
-  - Check WAN access controls
-  - Test failover security
-  - Verify Tailscale ACLs
+- ✅ Verify firewall rules
+  - ✅ Test VLAN isolation
+  - ✅ Validate service access restrictions
+  - ✅ Check WAN access controls
+  - ✅ Test failover security
+  - ✅ Verify Tailscale ACLs
 
 - Test monitoring setup
   - Verify Zeek logging

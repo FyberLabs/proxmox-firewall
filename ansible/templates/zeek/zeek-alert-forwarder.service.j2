@@ -1,0 +1,18 @@
+# Ansible Managed: {{ ansible_managed }}
+[Unit]
+Description=Zeek Alert Forwarder for {{ site_config.name | default('default_site') }}
+After=network.target zeek.service
+Requires=zeek.service
+
+[Service]
+Type=simple
+User={{ site_config.zeek.alert_forwarder.user | default('root') }}
+Group={{ site_config.zeek.alert_forwarder.group | default('root') }}
+ExecStart=/usr/local/bin/zeek-alert-forwarder.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# Ansible Managed: {{ ansible_managed }}
+# Zeek node configuration for {{ site_config.name | default('default_site') }}
+
+[logger]
+type=logger
+host={{ site_config.zeek.logger_host | default('localhost') }}
+
+[manager]
+type=manager
+host={{ site_config.zeek.manager_host | default('localhost') }}
+
+# Define proxies if needed, from site_config.zeek.proxies
+{% for proxy in site_config.zeek.proxies | default([]) %}
+[{{ proxy.name | default('proxy-' + loop.index|string) }}]
+type=proxy
+host={{ proxy.host | default('localhost') }}
+{% endfor %}
+
+# Define workers based on zeek_monitor_interfaces
+{% for interface in zeek_monitor_interfaces %}
+[worker-{{ loop.index }}]
+type=worker
+host={{ site_config.zeek.worker_host | default('localhost') }} # Assuming all workers on same host as controller for standalone
+interface={{ interface }}
+# cpus={{ site_config.zeek.worker_cpus | default(0) }} # Example: specify CPU pinning
+{% endfor %}

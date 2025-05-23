@@ -57,3 +57,29 @@ variable "domain" {
   description = "Local domain name for the site (e.g., primary.local)"
   type        = string
 }
+
+variable "vm_templates" {
+  description = "Configuration for VM template deployment"
+  type = map(object({
+    enabled = bool
+    start_on_deploy = bool
+  }))
+  default = {
+    opnsense = {
+      enabled = true
+      start_on_deploy = true
+    }
+    omada = {
+      enabled = true
+      start_on_deploy = true
+    }
+    zeek = {
+      enabled = true
+      start_on_deploy = false
+    }
+    tailscale = {
+      enabled = false
+      start_on_deploy = true
+    }
+  }
+}

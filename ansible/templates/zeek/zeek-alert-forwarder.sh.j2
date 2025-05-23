@@ -1,0 +1,49 @@
+#!/bin/bash
+# Ansible Managed: {{ ansible_managed }}
+
+# Script to forward Zeek notice.log alerts to OPNsense syslog
+# Site: {{ site_config.name | default('default_site') }}
+
+OPNSENSE_SYSLOG_TARGET="{{ opnsense_mgmt_ip }}" # Set by playbook from site_config
+ZEEK_NOTICE_LOG="{{ zeek_log_path }}/notice.log"
+SYSLOG_PORT="{{ site_config.zeek.alert_forwarder.opnsense_syslog_port | default(514) }}"
+SYSLOG_TAG="zeek-{{ site_config.name | default('zeek') }}"
+
+echo "Starting Zeek alert forwarder for site: {{ site_config.name }}"
+echo "Monitoring log: ${ZEEK_NOTICE_LOG}"
+echo "Forwarding to OPNsense syslog: ${OPNSENSE_SYSLOG_TARGET}:${SYSLOG_PORT} with tag ${SYSLOG_TAG}"
+
+if [ ! -f "${ZEEK_NOTICE_LOG}" ]; then
+    echo "Error: Zeek notice log ${ZEEK_NOTICE_LOG} not found. Exiting."
+    exit 1
+fi
+
+# Ensure inotifywait is available
+if ! command -v inotifywait &> /dev/null
+then
+    echo "inotifywait could not be found, please install inotify-tools. Exiting."
+    exit 1
+fi
+
+# Monitor the notice.log for modifications
+inotifywait -m -e modify --format '%w%f' "${ZEEK_NOTICE_LOG}" | \
+while read -r DETECTED_FILE; do
+    # Check if the detected file is indeed the notice.log (inotifywait can sometimes be broad)
+    if [[ "${DETECTED_FILE}" == "${ZEEK_NOTICE_LOG}" ]]; then
+        # Read the last line added to the file
+        ALERT_JSON=$(tail -n 1 "${ZEEK_NOTICE_LOG}")
+
+        # Attempt to extract relevant fields using jq, be robust if jq is not there or fields are missing
+        if command -v jq &> /dev/null; then
+            ALERT_MSG=$(echo "${ALERT_JSON}" | jq -r 'if .note and .msg then "Note: \(.note), Msg: \(.msg), Src: \(.src // "N/A"), Dst: \(.dst // "N/A"), Ts: \(.ts // "N/A")" else "Raw: " + . end')
+        else
+            ALERT_MSG="Raw: ${ALERT_JSON}" # Fallback if jq is not available
+        fi
+
+        # Log to remote syslog server (OPNsense)
+        logger -n "${OPNSENSE_SYSLOG_TARGET}" -P "${SYSLOG_PORT}" -t "${SYSLOG_TAG}" "${ALERT_MSG}"
+        echo "Forwarded alert: ${ALERT_MSG}"
+    fi
+done
+
+echo "Zeek alert forwarder stopped."

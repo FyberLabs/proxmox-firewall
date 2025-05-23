@@ -1,0 +1,28 @@
+# Ansible Managed: {{ ansible_managed }}
+# Zeek local site configuration for {{ site_config.name | default('default_site') }}
+
+# Define local networks for this site
+redef Site::local_nets = {
+{% for net in local_site_nets %}
+    {{ net }},
+{% endfor %}
+    # Standard RFC1918 networks, can be removed if local_site_nets is comprehensive
+    10.0.0.0/8,
+    172.16.0.0/12,
+    192.168.0.0/16
+};
+
+# Load additional site-specific scripts if defined
+{% for script in site_config.zeek.additional_local_scripts | default([]) %}
+@load {{ script }}
+{% endfor %}
+
+# Load any site-specific .zeek files from site_config if defined
+{% if site_config.zeek.custom_scripts is defined %}
+{% for script in site_config.zeek.custom_scripts %}
+@load {{ script }}
+{% endfor %}
+{% endif %}
+
+# Load the common json-logging-and-scripts.zeek (managed separately by playbook)
+@load json-logging-and-scripts

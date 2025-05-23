@@ -1,212 +1,332 @@
 ---
 # Create dynamic firewall rules based on configured devices
+# Expects `network_prefix` and `site_devices_map` to be set as facts by the calling playbook.
+# `site_devices_map` should be like: { "device_name": { "ip_address": "10.x.y.z", "vlan_id": "10", "type": "nas", "ports": [...] } }
 
-- name: Set common aliases for the firewall rules
+- name: Assert required variables are defined
+  ansible.builtin.assert:
+    that:
+      - network_prefix is defined
+      - site_devices_map is defined
+      - site_config is defined
+      - site_config.vlan_config is defined
+    fail_msg: "network_prefix, site_devices_map, or site_config details are not defined."
+
+- name: Define VLAN network variables from site_config and network_prefix
   ansible.builtin.set_fact:
-    lan_network: "{{ network_prefix }}.10.0/24"
-    camera_network: "{{ network_prefix }}.20.0/24"
-    iot_network: "{{ network_prefix }}.30.0/24"
-    guest_network: "{{ network_prefix }}.40.0/24"
-    mgmt_network: "{{ network_prefix }}.50.0/24"
+    vlan_networks: |
+      {% set nets = {} %}
+      {% for vlan_id, vlan_data in site_config.vlan_config.items() %}
+        {% set _ = nets.update({vlan_id|string: network_prefix + '.' + vlan_id|string + '.0/24'}) %}
+      {% endfor %}
+      {{ nets }}
+    # Example: vlan_networks will be { '10': '10.x.10.0/24', '20': '10.x.20.0/24', ... }
 
-# Create aliases for device IPs
+# Create host aliases for device IPs
 - name: Create device IP aliases
   ansibleguy.opnsense.alias:
-    name: "dev_{{ item.key }}"
+    name: "dev_{{ item.key }}" # item.key is device_name
     type: "host"
     content: "{{ item.value.ip_address }}"
     description: "{{ item.value.type | capitalize }} - {{ item.key }}"
     enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
-  when: site_devices is defined
+  loop: "{{ site_devices_map | default({}) | dict2items }}"
+  when: site_devices_map is defined
 
-# Create port aliases for devices
-- name: Load device port information
-  ansible.builtin.set_fact:
-    device_ports: >-
-      {{ device_ports | default({}) | combine({
-         item.key: lookup('file', 'devices/' + item.value.type + '.yml')
-         | from_yaml | json_query('ports')
-       }) }}
-  loop: "{{ site_devices | default({}) | dict2items }}"
-  when: site_devices is defined
-
-- name: Create port aliases for devices with ports
+# Create port aliases for devices that have port definitions
+- name: Create device port aliases
   ansibleguy.opnsense.alias:
-    name: "ports_{{ item.key }}"
+    name: "ports_{{ item.key }}" # item.key is device_name
     type: "port"
-    content: "{{ device_ports[item.key] | map(attribute='port') | join(',') }}"
+    content: "{{ item.value.ports | map(attribute='port') | join(',') }}"
     description: "Ports for {{ item.value.type | capitalize }} - {{ item.key }}"
     enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
+  loop: "{{ site_devices_map | default({}) | dict2items }}"
   when:
-    - site_devices is defined
-    - device_ports is defined
-    - device_ports[item.key] | default([]) | length > 0
+    - site_devices_map is defined
+    - item.value.ports is defined
+    - item.value.ports | length > 0
 
-# Create firewall rules based on device type
-- name: Configure Main LAN device firewall rules
+# General firewall rules for devices allowing traffic from their own VLAN to themselves on defined ports
+- name: Configure intra-VLAN device access rules
   ansibleguy.opnsense.firewall_rule:
-    name: "Allow access to {{ item.key }}"
-    interface: "lan"
+    # name field was removed, rule module uses description and other params to identify rules
+    # Rule name/description will be like: "Allow dev_my_nas from vlan10_net"
+    description: "Allow {{ item.key }} from its VLAN ({{ item.value.vlan_id }}) on its ports"
+    interface: "vlan{{ item.value.vlan_id }}" # Apply on the specific VLAN interface
     direction: "in"
-    ipprotocol: "inet"
-    source: "{{ lan_network }}"
-    destination: "{{ item.value.ip_address }}/32"
-    destination_port: "{{ 'ports_' + item.key if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
-    protocol: "{{ 'TCP/UDP' if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
     action: "pass"
-    log: false
+    protocol: "{{ 'TCP/UDP' if item.value.ports | length > 0 else 'any' }}" # More specific if ports are defined
+    source_net: "{{ vlan_networks[item.value.vlan_id|string] }}" # Source is the device's own VLAN network
+    destination_net: "dev_{{ item.key }}" # Destination is the device itself (using alias)
+    destination_port_range: "{{ 'ports_' + item.key if item.value.ports | length > 0 else 'any' }}" # Use port alias if available
+    log: "{{ site_config.firewall.log_device_rules | default(false) }}"
     enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
-  when:
-    - site_devices is defined
-    - item.value.vlan == 10
+  loop: "{{ site_devices_map | default({}) | dict2items }}"
+  when: site_devices_map is defined
 
-- name: Configure Camera VLAN device firewall rules
-  ansibleguy.opnsense.firewall_rule:
-    name: "Allow access to {{ item.key }}"
-    interface: "opt1"
-    direction: "in"
-    ipprotocol: "inet"
-    source: "{{ camera_network }}"
-    destination: "{{ item.value.ip_address }}/32"
-    destination_port: "{{ 'ports_' + item.key if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
-    protocol: "{{ 'TCP/UDP' if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
-    action: "pass"
-    log: false
-    enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
-  when:
-    - site_devices is defined
-    - item.value.vlan == 20
+# Specific Inter-VLAN access rules (examples, customize as needed)
 
-- name: Configure IoT VLAN device firewall rules
+- name: Allow Main LAN (VLAN10) access to NAS devices (ports 445,2049)
   ansibleguy.opnsense.firewall_rule:
-    name: "Allow access to {{ item.key }}"
-    interface: "lan"
+    description: "Allow Main LAN to NAS {{ item.key }}"
+    interface: "vlan{{ item.value.vlan_id }}" # Rule on NAS's VLAN interface
     direction: "in"
-    ipprotocol: "inet"
-    source: "{{ iot_network }}"
-    destination: "{{ item.value.ip_address }}/32"
-    destination_port: "{{ 'ports_' + item.key if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
-    protocol: "{{ 'TCP/UDP' if device_ports[item.key] | default([]) | length > 0 else 'any' }}"
     action: "pass"
-    log: false
+    protocol: "tcp" # Most NAS access is TCP (SMB, NFS over TCP). For NFS UDP, specific rules might be needed.
+    source_net: "{{ vlan_networks['10'] }}" # Source is Main LAN
+    destination_net: "dev_{{ item.key }}"   # Destination is the NAS device
+    destination_port_range: "ports_{{ item.key }}" # Use the port alias for the device
+    log: "{{ site_config.firewall.log_inter_vlan_nas | default(true) }}"
     enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
+  loop: "{{ site_devices_map | default({}) | dict2items }}"
   when:
-    - site_devices is defined
-    - item.value.vlan == 30
-
-# Allow Main LAN access to NAS devices
-- name: Configure Main LAN access to NAS
-  ansibleguy.opnsense.firewall_rule:
-    name: "Allow Main LAN access to {{ item.key }}"
-    interface: "lan"
-    direction: "in"
-    ipprotocol: "inet"
-    source: "{{ lan_network }}"
-    destination: "{{ item.value.ip_address }}/32"
-    destination_port: "445,2049"
-    protocol: "TCP"
-    action: "pass"
-    log: false
-    enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
-  when:
-    - site_devices is defined
+    - site_devices_map is defined
     - item.value.type == "nas"
+    - "'10' in vlan_networks" # Ensure Main LAN VLAN is defined
+    - item.value.ports is defined and item.value.ports | length > 0 # Ensure port alias exists
 
-# Allow Main LAN access to NVR devices in camera VLAN
-- name: Configure Main LAN access to NVR
+- name: Allow Main LAN (VLAN10) access to NVR devices (ports defined in NVR type or specific)
   ansibleguy.opnsense.firewall_rule:
-    name: "Allow Main LAN access to {{ item.key }}"
-    interface: "opt1"
+    description: "Allow Main LAN to NVR {{ item.key }}"
+    interface: "vlan{{ item.value.vlan_id }}" # Rule on NVR's VLAN interface (e.g., vlan20)
     direction: "in"
-    ipprotocol: "inet"
-    source: "{{ lan_network }}"
-    destination: "{{ item.value.ip_address }}/32"
-    destination_port: "443,9000"
-    protocol: "TCP"
     action: "pass"
-    log: false
+    protocol: "tcp" # Assuming TCP for NVR web/app access, adjust if UDP needed for streams
+    source_net: "{{ vlan_networks['10'] }}"    # Source is Main LAN
+    destination_net: "dev_{{ item.key }}"      # Destination is the NVR device
+    destination_port_range: "ports_{{ item.key }}" # Use the port alias for the device
+    log: "{{ site_config.firewall.log_inter_vlan_nvr | default(true) }}"
     enabled: true
-  loop: "{{ site_devices | default({}) | dict2items }}"
+  loop: "{{ site_devices_map | default({}) | dict2items }}"
   when:
-    - site_devices is defined
+    - site_devices_map is defined
     - item.value.type == "nvr"
+    - "'10' in vlan_networks"
+    - item.value.ports is defined and item.value.ports | length > 0 # Ensure port alias exists
 
-# Allow Home Assistant access to IoT devices
-- name: Configure Home Assistant access to IoT devices
+- name: Allow Home Assistant to access IoT VLAN devices
   ansibleguy.opnsense.firewall_rule:
-    name: "Allow Home Assistant access to IoT VLAN"
-    interface: "lan"
-    direction: "in"
-    ipprotocol: "inet"
-    source: "{{ site_devices.homeassistant.ip_address | default('10.1.10.10') }}/32"
-    destination: "{{ iot_network }}"
-    protocol: "any"
+    description: "Allow Home Assistant to all devices on IoT VLAN"
+    interface: "vlan{{ site_config.homeassistant.vlan_id | default('10') }}" # Rule on HA's VLAN interface or IoT VLAN if direction reversed
+    direction: "out" # Or 'in' on IoT VLAN interface with source as HA IP
     action: "pass"
-    log: false
+    protocol: "any"
+    # Assuming homeassistant details are in site_config or site_devices_map
+    source_net: "{{ site_devices_map['homeassistant'].ip_address if 'homeassistant' in site_devices_map else site_config.homeassistant.ip_address }}"
+    destination_net: "{{ vlan_networks[site_config.iot_vlan_id | default('30')] }}" # Destination is the IoT VLAN network
+    log: "{{ site_config.firewall.log_ha_to_iot | default(true) }}"
     enabled: true
   when:
-    - site_devices is defined
-    - site_devices.homeassistant is defined
+    - site_devices_map is defined and ('homeassistant' in site_devices_map or site_config.homeassistant.ip_address is defined)
+    - site_config.iot_vlan_id | default('30') in vlan_networks
 
-# Block all other inter-VLAN traffic by default
-- name: Block inter-VLAN traffic by default
+# Default inter-VLAN block rules. These are examples and highly dependent on security policy.
+# It's often better to have explicit allow rules and a final default deny on each interface.
+# The following creates broad blocks, be cautious.
+- name: Example inter-VLAN block rules (customize or remove)
   ansibleguy.opnsense.firewall_rule:
-    name: "Block {{ item.source_name }} to {{ item.dest_name }}"
-    interface: "{{ item.interface }}"
-    direction: "in"
-    ipprotocol: "inet"
-    source: "{{ item.source }}"
-    destination: "{{ item.destination }}"
-    protocol: "any"
+    description: "Block {{ item.src_vlan_name }} to {{ item.dst_vlan_name }}"
+    interface: "vlan{{ item.src_vlan_id }}" # Apply on source VLAN interface
+    direction: "out" # Or 'in' on destination VLAN with source/dest swapped
     action: "block"
-    log: false
-    enabled: true
-  loop:
-    - { interface: "lan", source: "{{ lan_network }}", destination: "{{ camera_network }}", source_name: "Main LAN", dest_name: "Camera VLAN" }
-    - { interface: "lan", source: "{{ lan_network }}", destination: "{{ guest_network }}", source_name: "Main LAN", dest_name: "Guest VLAN" }
-    - { interface: "lan", source: "{{ guest_network }}", destination: "{{ lan_network }}", source_name: "Guest VLAN", dest_name: "Main LAN" }
-    - { interface: "lan", source: "{{ guest_network }}", destination: "{{ camera_network }}", source_name: "Guest VLAN", dest_name: "Camera VLAN" }
-    - { interface: "lan", source: "{{ guest_network }}", destination: "{{ iot_network }}", source_name: "Guest VLAN", dest_name: "IoT VLAN" }
-    - { interface: "opt1", source: "{{ camera_network }}", destination: "{{ lan_network }}", source_name: "Camera VLAN", dest_name: "Main LAN" }
-    - { interface: "opt1", source: "{{ camera_network }}", destination: "{{ iot_network }}", source_name: "Camera VLAN", dest_name: "IoT VLAN" }
-    - { interface: "opt1", source: "{{ camera_network }}", destination: "{{ guest_network }}", source_name: "Camera VLAN", dest_name: "Guest VLAN" }
-
-# Allow all VLANs to access internet
-- name: Allow internet access for all VLANs
-  ansibleguy.opnsense.firewall_rule:
-    name: "Allow {{ item.name }} internet access"
-    interface: "{{ item.interface }}"
-    direction: "in"
-    ipprotocol: "inet"
-    source: "{{ item.network }}"
-    destination: "any"
-    destination_not: true
-    destination_net: "{{ lan_network }},{{ camera_network }},{{ iot_network }},{{ guest_network }},{{ mgmt_network }}"
     protocol: "any"
-    action: "pass"
-    log: false
-    enabled: true
-  loop:
-    - { interface: "lan", network: "{{ lan_network }}", name: "Main LAN" }
-    - { interface: "lan", network: "{{ iot_network }}", name: "IoT VLAN" }
-    - { interface: "lan", network: "{{ guest_network }}", name: "Guest VLAN" }
-    - { interface: "opt1", network: "{{ camera_network }}", name: "Camera VLAN" }
+    source_net: "{{ vlan_networks[item.src_vlan_id|string] }}"
+    destination_net: "{{ vlan_networks[item.dst_vlan_id|string] }}"
+    log: "{{ site_config.firewall.log_inter_vlan_blocks | default(false) }}"
+    enabled: "{{ site_config.firewall.enable_default_inter_vlan_blocks | default(true) }}"
+  loop: "{{ site_config.firewall.inter_vlan_blocks | default([]) }}"
+  # Example site_config.firewall.inter_vlan_blocks:
+  # - { src_vlan_id: '10', dst_vlan_id: '20', src_vlan_name: 'MainLAN', dst_vlan_name: 'Cameras' }
+  # - { src_vlan_id: '10', dst_vlan_id: '40', src_vlan_name: 'MainLAN', dst_vlan_name: 'Guest' }
+  # ... and so on for all restricted pairs
 
-# Always allow Tailscale traffic through WAN
-- name: Allow Tailscale WireGuard traffic
+# Allow all defined VLANs to access internet (anything not local)
+# This uses destination_not: true and a list of all local RFC1918 networks or specific VLAN subnets.
+- name: Allow internet access for all configured VLANs
   ansibleguy.opnsense.firewall_rule:
-    name: "Allow Tailscale WireGuard"
-    interface: "wan"
-    direction: "in"
-    ipprotocol: "inet"
-    protocol: "UDP"
-    destination_port: "41641"
+    description: "Allow VLAN{{ item.vlan_id }} to Internet"
+    interface: "vlan{{ item.vlan_id }}"
+    direction: "out" # Traffic leaving the VLAN interface
     action: "pass"
-    log: false
+    protocol: "any"
+    source_net: "{{ vlan_networks[item.vlan_id|string] }}"
+    destination_net: "any"
+    # To ensure it's internet, not other local nets, use destination_not with local subnets
+    # However, a simpler approach for basic internet is just dest 'any' on an outbound rule,
+    # with stricter inter-VLAN rules taking precedence.
+    # For more robust "internet only", you'd typically exclude RFC1918 destinations.
+    # This example is basic.
+    log: "{{ site_config.firewall.log_vlan_to_internet | default(false) }}"
+    enabled: true
+  loop: "{{ vlan_config | dict2items }}" # Iterates through defined VLANs
+  loop_control:
+    loop_var: vlan_item_entry # Avoid conflict with 'item' from outer loops if this task is included
+    # Re-map to a more usable structure for the loop if needed, e.g. just a list of vlan_ids
+  vars:
+    item: # Shadowing outer item if this task is part of a loop, be careful.
+      vlan_id: "{{ vlan_item_entry.key }}"
+      # vlan_data: "{{ vlan_item_entry.value }}" # if needed
+
+# Default WAN rule: Allow Tailscale WireGuard traffic (usually UDP 41641)
+# This should be on the WAN interface(s)
+- name: Allow Tailscale WireGuard traffic on WAN interfaces
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow Tailscale Inbound on {{ wan_if.name }}"
+    interface: "{{ wan_if.name }}" # Logical name of the WAN interface (e.g., 'wan', 'opt1')
+    direction: "in"
+    action: "pass"
+    protocol: "udp"
+    destination_port_range: "{{ site_config.tailscale.port | default('41641') }}"
+    # Source can be 'any' or specific Tailscale coordination server IPs if known
+    source_net: "any"
+    # Destination should be the WAN IP, but 'any' usually works if it's an inbound rule on WAN if.
+    destination_net: "any" # Or specific WAN IP alias if OPNsense creates them e.g. WAN_address
+    log: "{{ site_config.firewall.log_tailscale_wan | default(true) }}"
+    enabled: true
+  loop: "{{ site_config.opnsense.interfaces | selectattr('role', 'equalto', 'wan') | list }}"
+  # Assuming WAN interfaces in site_config.opnsense.interfaces have a 'role: wan' attribute
+  # e.g. site_config.opnsense.interfaces:
+  #   - { name: 'WAN', device: 'igb0', descr: 'WAN Fiber', role: 'wan' }
+  #   - { name: 'WAN_SL', device: 'igb3', descr: 'WAN Starlink', role: 'wan' }
+  loop_control:
+    loop_var: wan_if
+  when: site_config.opnsense.interfaces is defined
+
+# Add a final default deny rule on each VLAN interface if desired (cleaner than many block rules)
+# - name: Add default deny on VLAN interfaces
+#   ansibleguy.opnsense.firewall_rule:
+#     description: "Default deny on VLAN{{ item.key }}"
+#     interface: "vlan{{ item.key }}"
+#     direction: "in" # Or 'out' depending on your policy
+#     action: "block"
+#     protocol: "any"
+#     source_net: "any"
+#     destination_net: "any"
+#     log: "{{ site_config.firewall.log_default_deny | default(true) }}"
+#     enabled: true
+#   loop: "{{ vlan_config | dict2items }}"
+#   when: site_config.firewall.enable_vlan_default_deny | default(false)
+
+# Apply changes (if ansibleguy.opnsense modules don't auto-apply or if batching)
+# - name: Apply OPNsense firewall changes
+#   ansibleguy.opnsense.apply:
+#     module: "firewall" # or specific submodule if needed
+#   when: firewall_rules_changed is defined and firewall_rules_changed # Register changes in above tasks
+
+# Camera VLAN specific rules
+- name: Allow camera VLAN devices to access cloud services
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow Camera VLAN to Cloud Services"
+    interface: "vlan20"  # Camera VLAN
+    direction: "out"
+    action: "pass"
+    protocol: "tcp"
+    source_net: "{{ vlan_networks['20'] }}"  # Camera VLAN network
+    destination_net: "any"
+    destination_port_range: "80,443,554,8554,8000,8001,8002,8003,8004,8005,8006,8007,8008,8009,8010"  # HTTP, HTTPS, RTSP, common cloud ports
+    log: "{{ site_config.firewall.log_camera_cloud | default(true) }}"
+    enabled: true
+
+- name: Allow Main LAN to access cameras via RTSP
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow Main LAN to Camera VLAN RTSP"
+    interface: "vlan20"  # Camera VLAN
+    direction: "in"
+    action: "pass"
+    protocol: "tcp"
+    source_net: "{{ vlan_networks['10'] }}"  # Main LAN
+    destination_net: "{{ vlan_networks['20'] }}"  # Camera VLAN
+    destination_port_range: "554,8554"  # RTSP ports
+    log: "{{ site_config.firewall.log_camera_rtsp | default(true) }}"
+    enabled: true
+
+- name: Allow Main LAN to access cameras via ONVIF
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow Main LAN to Camera VLAN ONVIF"
+    interface: "vlan20"  # Camera VLAN
+    direction: "in"
+    action: "pass"
+    protocol: "tcp"
+    source_net: "{{ vlan_networks['10'] }}"  # Main LAN
+    destination_net: "{{ vlan_networks['20'] }}"  # Camera VLAN
+    destination_port_range: "80,443,8000"  # HTTP, HTTPS, ONVIF
+    log: "{{ site_config.firewall.log_camera_onvif | default(true) }}"
+    enabled: true
+
+- name: Allow Main LAN to access NVR web interface
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow Main LAN to NVR Web Interface"
+    interface: "vlan20"  # Camera VLAN
+    direction: "in"
+    action: "pass"
+    protocol: "tcp"
+    source_net: "{{ vlan_networks['10'] }}"  # Main LAN
+    destination_net: "{{ vlan_networks['20'] }}"  # Camera VLAN
+    destination_port_range: "80,443"  # HTTP, HTTPS
+    log: "{{ site_config.firewall.log_nvr_web | default(true) }}"
+    enabled: true
+
+- name: Block all other access to camera VLAN
+  ansibleguy.opnsense.firewall_rule:
+    description: "Block all other access to Camera VLAN"
+    interface: "vlan20"  # Camera VLAN
+    direction: "in"
+    action: "block"
+    protocol: "any"
+    source_net: "any"
+    destination_net: "{{ vlan_networks['20'] }}"  # Camera VLAN
+    log: "{{ site_config.firewall.log_camera_block | default(true) }}"
+    enabled: true
+
+# IoT VLAN specific rules
+- name: Allow IoT devices to access cloud services
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow IoT VLAN to Cloud Services"
+    interface: "vlan{{ site_config.iot_vlan_id | default('30') }}"  # IoT VLAN
+    direction: "out"
+    action: "pass"
+    protocol: "tcp"
+    source_net: "{{ vlan_networks[site_config.iot_vlan_id | default('30')] }}"  # IoT VLAN network
+    destination_net: "any"
+    destination_port_range: "80,443,8883,8884,8886,8887,8888,8889,1883,1884,1886,1887,1888,1889"  # HTTP, HTTPS, MQTT, MQTTS
+    log: "{{ site_config.firewall.log_iot_cloud | default(true) }}"
+    enabled: true
+
+- name: Allow Home Assistant to access IoT devices
+  ansibleguy.opnsense.firewall_rule:
+    description: "Allow Home Assistant to IoT VLAN"
+    interface: "vlan{{ site_config.iot_vlan_id | default('30') }}"  # IoT VLAN
+    direction: "in"
+    action: "pass"
+    protocol: "any"
+    source_net: "{{ site_devices_map['homeassistant'].ip_address if 'homeassistant' in site_devices_map else site_config.homeassistant.ip_address }}"  # Home Assistant IP
+    destination_net: "{{ vlan_networks[site_config.iot_vlan_id | default('30')] }}"  # IoT VLAN network
+    log: "{{ site_config.firewall.log_ha_to_iot | default(true) }}"
+    enabled: true
+  when:
+    - site_devices_map is defined and ('homeassistant' in site_devices_map or site_config.homeassistant.ip_address is defined)
+
+- name: Block IoT devices from accessing each other
+  ansibleguy.opnsense.firewall_rule:
+    description: "Block IoT devices from accessing each other"
+    interface: "vlan{{ site_config.iot_vlan_id | default('30') }}"  # IoT VLAN
+    direction: "in"
+    action: "block"
+    protocol: "any"
+    source_net: "{{ vlan_networks[site_config.iot_vlan_id | default('30')] }}"  # IoT VLAN network
+    destination_net: "{{ vlan_networks[site_config.iot_vlan_id | default('30')] }}"  # IoT VLAN network
+    log: "{{ site_config.firewall.log_iot_to_iot | default(true) }}"
+    enabled: true
+
+- name: Block all other access to IoT VLAN
+  ansibleguy.opnsense.firewall_rule:
+    description: "Block all other access to IoT VLAN"
+    interface: "vlan{{ site_config.iot_vlan_id | default('30') }}"  # IoT VLAN
+    direction: "in"
+    action: "block"
+    protocol: "any"
+    source_net: "any"
+    destination_net: "{{ vlan_networks[site_config.iot_vlan_id | default('30')] }}"  # IoT VLAN network
+    log: "{{ site_config.firewall.log_iot_block | default(true) }}"
     enabled: true

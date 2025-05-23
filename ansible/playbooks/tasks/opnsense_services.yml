@@ -1,0 +1,72 @@
+---
+# Configure OPNsense basic services like DNS (Unbound) and NTP
+# Expects site_config to be loaded by the calling playbook.
+
+- name: Assert required variables are defined
+  ansible.builtin.assert:
+    that:
+      - site_config is defined
+      - site_config.name is defined # Used for potential host-specific settings or logging
+      - network_prefix is defined # For DNS forward zones etc.
+      - domain is defined # Local domain
+    fail_msg: "site_config, network_prefix, or domain are not defined."
+
+# Configure Unbound DNS Resolver
+- name: Prepare Unbound DNS access control list
+  ansible.builtin.set_fact:
+    unbound_acl:
+      "{{ site_config.vlan_config.keys() |
+         map('regex_replace', '^(.*)$', network_prefix + '.\\1.0/24') |
+         list +
+         [network_prefix + '.50.0/24']
+         if site_config.vlan_config
+         else [network_prefix + '.50.0/24'] }}"
+
+- name: Enable and configure Unbound DNS resolver
+  ansibleguy.opnsense.unbound_general:
+    enabled: "{{ site_config.services.unbound.enabled | default(true) }}"
+    port: "{{ site_config.services.unbound.port | default(53) }}"
+    access_control_networks: "{{ unbound_acl }}"
+    # Add more Unbound settings as needed from site_config
+    # e.g., register_dhcp_leases: true, register_dhcp_static_mappings: true
+    # custom_options: site_config.services.unbound.custom_options | default(omit)
+  notify: Reload Unbound DNS # Handler to apply Unbound changes
+
+- name: Configure DNS over TLS servers for Unbound (optional)
+  ansibleguy.opnsense.unbound_dot:
+    servers: "{{ item }}"
+    state: present
+  loop: "{{ site_config.services.unbound.dns_over_tls_servers | default([]) }}"
+  # Example in site_config:
+  # services:
+  #   unbound:
+  #     dns_over_tls_servers:
+  #       - "1.1.1.1@853#cloudflare-dns.com"
+  #       - "dns.google@853#dns.google"
+  when: site_config.services.unbound.dns_over_tls_servers is defined
+  notify: Reload Unbound DNS
+
+# Configure NTP (Network Time Protocol) Client
+- name: Configure NTP client settings
+  ansibleguy.opnsense.ntp_client:
+    enabled: "{{ site_config.services.ntp.enabled | default(true) }}"
+    # Provide a list of NTP servers, can come from site_config
+    servers: "{{ site_config.services.ntp.servers | default(['0.opnsense.pool.ntp.org', '1.opnsense.pool.ntp.org']) }}"
+    # Other options like prefer, noselect can be added
+  notify: Restart NTPD # Handler to apply NTP changes
+
+# Placeholder for handlers if not defined globally
+# handlers:
+#   - name: Reload Unbound DNS
+#     ansibleguy.opnsense.service:
+#       name: unbound
+#       state: reloaded
+#
+#   - name: Restart NTPD
+#     ansibleguy.opnsense.service:
+#       name: ntpd
+#       state: restarted
+#
+# Note: Actual service reload/restart might be handled by ansibleguy.opnsense modules themselves
+# or by a global apply task at the end of the main playbook.
+# Check module documentation for `ansibleguy.opnsense.unbound_general` and `ntp_client` for auto-reload behavior.

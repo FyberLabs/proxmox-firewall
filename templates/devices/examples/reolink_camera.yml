@@ -26,6 +26,6 @@ allow_internet: false
 allow_local_network: false
 
 # NVR connection
-nvr_ip: "10.1.20.3"  # Update with your actual NVR IP
+nvr_ip: "{{ site_config.network_prefix }}.20.3"  # NVR IP in camera VLAN
 nvr_managed: true
 needs_dhcp_reservation: true

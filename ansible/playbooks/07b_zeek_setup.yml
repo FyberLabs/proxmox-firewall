@@ -3,14 +3,45 @@
   hosts: zeek
   become: true
   vars:
-    zeek_version: "5.0.7"
-    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
-    network_prefix: "{{ '10.1' if 'tennessee' in group_names else '10.2' }}"
-    eth_interfaces:
-      - eth1  # WAN (fiber)
-      - eth2  # WAN2 (Starlink)
-    zeek_home: "/opt/zeek"
-    zeek_log_path: "/var/log/zeek"
+    # Default values, can be overridden in site_config
+    default_zeek_version: "6.0.0" # Example: updated default
+    default_zeek_home: "/opt/zeek"
+    default_zeek_log_path: "/var/log/zeek"
+    # site_config, network_prefix, etc., will be loaded/set in pre_tasks
+
+  pre_tasks:
+    - name: Determine site name from inventory hostname
+      ansible.builtin.set_fact:
+        site_name_from_inventory: "{{ inventory_hostname.split('-')[0] }}"
+      when: "'-' in inventory_hostname"
+
+    - name: Fail if site name cannot be determined from inventory hostname
+      ansible.builtin.fail:
+        msg: "Could not determine site name from inventory_hostname '{{ inventory_hostname }}'. Expected format: <site_name>-zeek"
+      when: site_name_from_inventory is not defined
+
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ site_name_from_inventory }}.yml"
+
+    - name: Set site_config fact if not loaded directly
+      ansible.builtin.set_fact:
+        site_config: "{{ hostvars[inventory_hostname].site_config }}"
+      when: site_config is not defined and hostvars[inventory_hostname].site_config is defined
+
+    - name: Fail if site_config is not loaded
+      ansible.builtin.fail:
+        msg: "Failed to load site_config for {{ site_name_from_inventory }}."
+      when: site_config is not defined
+
+    - name: Set Zeek configuration variables
+      ansible.builtin.set_fact:
+        network_prefix: "{{ site_config.network_prefix }}"
+        zeek_version: "{{ site_config.zeek.version | default(default_zeek_version) }}"
+        zeek_home: "{{ site_config.zeek.home_dir | default(default_zeek_home) }}"
+        zeek_log_path: "{{ site_config.zeek.log_dir | default(default_zeek_log_path) }}"
+        zeek_monitor_interfaces: "{{ site_config.zeek.monitor_interfaces | default(['eth1', 'eth2']) }}" # Default to old values if not specified
+        opnsense_mgmt_ip: "{{ site_config.opnsense.management_ip | default(network_prefix + '.50.1') }}"
 
   tasks:
     - name: Update apt cache
@@ -18,7 +49,7 @@
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Install dependencies
+    - name: Install Zeek dependencies
       ansible.builtin.apt:
         name:
           - build-essential
@@ -38,9 +69,10 @@
           - libmaxminddb-dev
           - python3-pip
           - jq
-          - ethtool
-          - tcpdump
-          - tshark
+          - ethtool # For debugging/diagnostics
+          - tcpdump # For packet capture/debugging
+          - tshark  # For packet analysis
+          - inotify-tools # For alert forwarder
         state: present
 
     - name: Create Zeek log directory
@@ -54,12 +86,16 @@
         url: "https://download.zeek.org/zeek-{{ zeek_version }}.tar.gz"
         dest: "/tmp/zeek-{{ zeek_version }}.tar.gz"
         mode: '0644'
+      register: zeek_download
+      until: zeek_download is succeeded
+      retries: 3
+      delay: 5
 
     - name: Extract Zeek archive
       ansible.builtin.unarchive:
         src: "/tmp/zeek-{{ zeek_version }}.tar.gz"
         dest: "/tmp/"
-        remote_src: true
+        remote_src: true # Source is on the remote machine
 
     - name: Create Zeek install directory
       ansible.builtin.file:
@@ -69,63 +105,41 @@
 
     - name: Build and install Zeek
       ansible.builtin.shell: |
-        cd /tmp/zeek-{{ zeek_version }}
-        ./configure --prefix={{ zeek_home }}
+        cd "/tmp/zeek-{{ zeek_version }}"
+        ./configure --prefix={{ zeek_home }} --disable-python # Add options as needed from site_config
         make -j $(nproc)
         make install
       args:
-        creates: "{{ zeek_home }}/bin/zeek"
+        creates: "{{ zeek_home }}/bin/zeek" # Idempotency: run only if zeek is not already installed at this version/prefix
 
-    - name: Add Zeek to PATH
+    - name: Add Zeek to PATH for all users
       ansible.builtin.copy:
-        content: |
-          export PATH=$PATH:{{ zeek_home }}/bin
+        content: "export PATH=$PATH:{{ zeek_home }}/bin"
         dest: /etc/profile.d/zeek.sh
         mode: '0644'
 
-    - name: Configure Zeek networks
-      ansible.builtin.copy:
-        content: |
-          # Internal networks for Zeek
-          redef Site::local_nets = {
-              {{ network_prefix }}.0.0/16,
-              10.0.0.0/8,
-              172.16.0.0/12,
-              192.168.0.0/16
-          };
+    - name: Configure Zeek local networks (local.zeek)
+      ansible.builtin.template: # Use template for more complex configurations
+        src: templates/zeek/local.zeek.j2 # Assumes template exists
         dest: "{{ zeek_home }}/share/zeek/site/local.zeek"
         mode: '0644'
+      vars:
+        local_site_nets: "{{ site_config.zeek.local_nets | default([network_prefix + '.0.0/16']) }}"
+        # Add other RFC1918 networks or specific local nets from site_config if needed
 
-    - name: Configure Zeek node
-      ansible.builtin.copy:
-        content: |
-          [logger]
-          type=logger
-          host=localhost
-
-          [manager]
-          type=manager
-          host=localhost
-
-          [proxy-1]
-          type=proxy
-          host=localhost
-
-          [worker-1]
-          type=worker
-          host=localhost
-          interface=eth1
-
-          [worker-2]
-          type=worker
-          host=localhost
-          interface=eth2
+    - name: Configure Zeek node setup (node.cfg)
+      ansible.builtin.template:
+        src: templates/zeek/node.cfg.j2 # Assumes template exists
         dest: "{{ zeek_home }}/etc/node.cfg"
         mode: '0644'
+      # zeek_monitor_interfaces is passed to the template
 
-    - name: Configure Zeek to save logs in JSON format
+    - name: Configure Zeek logging and scripts (was appended to local.zeek, better to separate or use @load)
       ansible.builtin.copy:
         content: |
+          # Ansible Managed: {{ ansible_managed }}
+          # Common Zeek scripts and logging settings for {{ site_config.name | default('default_site') }}
+
           @load policy/tuning/json-logs
           @load frameworks/files/hash-all-files
           @load frameworks/software/version-changes
@@ -133,10 +147,10 @@
           @load misc/detect-traceroute
           @load misc/scan
           @load misc/stats
-          @load-sigs frameworks/signatures/detect-windows-shells
+          @load policy/frameworks/signatures/detect-windows-shells
           @load protocols/ftp/software
           @load protocols/smtp/software
-          @load protocols/ssh/software
+          @load protocols/ssh/software       # For general SSH logging
           @load protocols/http/software
           @load protocols/dns/detect-external-names
           @load policy/protocols/conn/vlan-logging
@@ -146,192 +160,120 @@
           @load policy/protocols/http/var-extraction-cookies
           @load policy/protocols/http/var-extraction-uri
 
+          # Enhanced detection (good defaults)
+          @load policy/integration/collective-intel    # If you have an intel framework setup
+          @load policy/protocols/ssl/detect-weak-keys
+          @load policy/protocols/ssh/detect-bruteforcing # Often a good default
+          # @load policy/protocols/http/detect-sqli # Can be noisy, enable if needed or rely on specific notices
+
+          # Load standard plugins (assuming their .zeek files are in the site directory)
+          @load ja3
+          @load communityid
+          # @load spicy-analyzers/dpd # Example if another common plugin was added
+
           # Custom settings specific to our network
           redef LogAscii::use_json = T;
 
-          # Log suspicious activity
+          # Log suspicious activity - make this configurable via site_config.zeek.notice_types
+          {% if site_config.zeek.notice_types is defined and site_config.zeek.notice_types | length > 0 %}
+          redef Notice::emailed_types += {
+          {% for notice in site_config.zeek.notice_types %}
+              {{ notice }}{{ ',' if not loop.last else '' }}
+          {% endfor %}
+          };
+          {% else %}
+          # Default notice types if not specified in site_config (these are often good starting points)
           redef Notice::emailed_types += {
               Scan::Port_Scan,
               Scan::Address_Scan,
-              SSH::Password_Guessing,
-              HTTP::SQL_Injection_Attacker,
-              Weird::Activity
+              SSH::Password_Guessing,           # Covered by detect-bruteforcing script as well
+              # HTTP::SQL_Injection_Attacker,   # Can be very noisy depending on apps
+              Weird::Activity,
+              Signatures::Sensitive_Signature,  # If using signature detection
+              SSL::Invalid_Server_Cert,
+              SSL::Weak_Cipher_Found
           };
-        dest: "{{ zeek_home }}/share/zeek/site/local.zeek"
-        mode: '0644'
+          {% endif %}
+        dest: "{{ zeek_home }}/share/zeek/site/json-logging-and-scripts.zeek"
+      # Ensure local.zeek @loads this, or manage directly in local.zeek.j2
 
-    # Install Zeek plugins for enhanced monitoring
-    - name: Install Ja3 Zeek plugin
-      ansible.builtin.git:
-        repo: https://github.com/salesforce/ja3.git
-        dest: /tmp/ja3
+    # Install common/standard Zeek plugins by default
+    - name: Install Ja3 Zeek plugin (standard)
+      block:
+        - name: Clone Ja3 plugin repository
+          ansible.builtin.git:
+            repo: 'https://github.com/salesforce/ja3.git'
+            dest: "/tmp/zeek_plugin_ja3"
+            version: 'master' # Or a specific tag/commit
+        - name: Copy Ja3 plugin files to Zeek site directory
+          ansible.builtin.copy:
+            src: "/tmp/zeek_plugin_ja3/zeek/{{ item }}"
+            dest: "{{ zeek_home }}/share/zeek/site/"
+            remote_src: true
+          loop:
+            - 'ja3.zeek'
+            - 'ja3s.zeek'
+            - 'ja3.hlto'
+          # Add creates for idempotency, e.g. based on the .hlto file
+          # This part needs a robust idempotency check, e.g. a shell task that checks and then copies.
+          # For simplicity here, we rely on git clone not re-cloning if dir exists.
 
-    - name: Install Ja3 plugin to Zeek
-      ansible.builtin.shell: |
-        cp /tmp/ja3/zeek/*.zeek {{ zeek_home }}/share/zeek/site/
+    - name: Install Zeek Community ID plugin (standard)
+      ansible.builtin.shell:
+        cmd: "{{ zeek_home }}/bin/zkg install zeek/corelight/community-id --force"
+        # Using --force to ensure it attempts install/update if already there.
+        # More robust idempotency would be checking if a specific file from the plugin exists.
       args:
-        creates: "{{ zeek_home }}/share/zeek/site/ja3.zeek"
+        # Heuristic for idempotency, check for a known file provided by the plugin
+        creates: "{{ zeek_home }}/lib/zeek/plugins/Corelight_CommunityID/lib/Corelight_CommunityID.hlto"
+      register: zkg_community_id_install
+      changed_when: "'already installed' not in zkg_community_id_install.stdout and zkg_community_id_install.rc == 0"
 
-    - name: Install Zeek community ID plugin
-      ansible.builtin.git:
-        repo: https://github.com/corelight/zeek-community-id.git
-        dest: /tmp/zeek-community-id
+    # Install additional configured Zeek plugins from site_config
+    - name: Install additional configured Zeek plugins (from site_config.zeek.plugins)
+      ansible.builtin.include_tasks: tasks/zeek_install_plugin.yml
 
-    - name: Build and install community ID plugin
-      ansible.builtin.shell: |
-        cd /tmp/zeek-community-id
-        {{ zeek_home }}/bin/zkg install .
-      args:
-        creates: "{{ zeek_home }}/lib/zeek/plugins/Corelight_CommunityID"
-
-    - name: Deploy Zeek systemd service
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Zeek Network Security Monitor
-          After=network.target
-
-          [Service]
-          Type=forking
-          ExecStart={{ zeek_home }}/bin/zeekctl start
-          ExecStop={{ zeek_home }}/bin/zeekctl stop
-          User=root
-          Group=root
-          Restart=on-failure
-
-          [Install]
-          WantedBy=multi-user.target
+    - name: Deploy Zeek systemd service file
+      ansible.builtin.template:
+        src: templates/zeek/zeek.service.j2 # Assumes template exists
         dest: /etc/systemd/system/zeek.service
         mode: '0644'
+      notify: Reload systemd and restart Zeek
 
     - name: Deploy log rotation for Zeek logs
-      ansible.builtin.copy:
-        content: |
-          {{ zeek_log_path }}/*.log {
-            daily
-            rotate 7
-            compress
-            missingok
-            notifempty
-            create 640 root root
-            sharedscripts
-            postrotate
-              if [ -f {{ zeek_home }}/var/run/zeekctl.pid ]; then
-                {{ zeek_home }}/bin/zeekctl cron
-              fi
-            endscript
-          }
+      ansible.builtin.template:
+        src: templates/zeek/zeek.logrotate.j2 # Assumes template exists
         dest: /etc/logrotate.d/zeek
         mode: '0644'
 
-    - name: Deploy script to send alerts to OPNsense
-      ansible.builtin.copy:
-        content: |
-          #!/bin/bash
-
-          # Send Zeek alerts to OPNsense syslog server
-          OPNSENSE_IP="{{ network_prefix }}.50.1"
-
-          inotifywait -m -r -e modify --format '%w%f' {{ zeek_log_path }}/notice.log | while read FILE
-          do
-            if [[ "$FILE" == *"notice.log"* ]]; then
-              ALERT=$(tail -n 1 "$FILE" | jq -r '.note, .msg, .src, .dst, .ts' | tr '\n' ',' | sed 's/,$//')
-              logger -n $OPNSENSE_IP -P 514 -t "zeek" "ALERT: $ALERT"
-            fi
-          done
-        dest: /usr/local/bin/zeek-alert-forwarder.sh
+    - name: Deploy script to forward Zeek alerts to OPNsense
+      ansible.builtin.template:
+        src: templates/zeek/zeek-alert-forwarder.sh.j2 # Assumes template exists
+        dest: "/usr/local/bin/zeek-alert-forwarder.sh"
         mode: '0755'
+      # opnsense_mgmt_ip is passed to the template
 
-    - name: Install inotify-tools for alert forwarding
-      ansible.builtin.apt:
-        name: inotify-tools
-        state: present
-
-    - name: Deploy alert forwarder service
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Zeek Alert Forwarder
-          After=zeek.service
-
-          [Service]
-          Type=simple
-          ExecStart=/usr/local/bin/zeek-alert-forwarder.sh
-          User=root
-          Group=root
-          Restart=on-failure
-
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/zeek-alerts.service
+    - name: Deploy Zeek alert forwarder systemd service
+      ansible.builtin.template:
+        src: templates/zeek/zeek-alert-forwarder.service.j2 # Assumes template exists
+        dest: /etc/systemd/system/zeek-alert-forwarder.service
         mode: '0644'
+      notify: Reload systemd and restart zeek-alert-forwarder
 
-    - name: Deploy Zeek web dashboard
-      ansible.builtin.copy:
-        content: |
-          #!/bin/bash
-
-          # Simple HTTP server to view Zeek logs
-          cd {{ zeek_log_path }}
-          python3 -m http.server 8888
-        dest: /usr/local/bin/zeek-dashboard.sh
-        mode: '0755'
-
-    - name: Deploy Zeek dashboard service
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Zeek Web Dashboard
-          After=zeek.service
-
-          [Service]
-          Type=simple
-          ExecStart=/usr/local/bin/zeek-dashboard.sh
-          User=root
-          Group=root
-          Restart=on-failure
-
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/zeek-dashboard.service
-        mode: '0644'
-
-    - name: Initialize Zeek
-      ansible.builtin.shell: |
-        {{ zeek_home }}/bin/zeekctl deploy
-      args:
-        creates: "{{ zeek_home }}/spool/installed-scripts-do-not-touch/site/local.zeek"
-
-    - name: Enable and start Zeek service
+  handlers:
+    - name: Reload systemd and restart Zeek
       ansible.builtin.systemd:
+        daemon_reload: true
         name: zeek
-        enabled: true
-        state: started
-        daemon_reload: true
+        state: restarted
+      when: site_config.zeek.enabled | default(true)
 
-    - name: Enable and start alert forwarder
+    - name: Reload systemd and restart zeek-alert-forwarder
       ansible.builtin.systemd:
-        name: zeek-alerts
-        enabled: true
-        state: started
         daemon_reload: true
+        name: zeek-alert-forwarder
+        state: restarted
+      when: site_config.zeek.alert_forwarder_enabled | default(true)
 
-    - name: Enable and start Zeek dashboard
-      ansible.builtin.systemd:
-        name: zeek-dashboard
-        enabled: true
-        state: started
-        daemon_reload: true
-
-    - name: Add access rule to OPNsense for Zeek dashboard
-      delegate_to: "{{ 'tn-opnsense' if 'tennessee' in group_names else 'ph-opnsense' }}"
-      ansibleguy.opnsense.rule:
-        source: "{{ network_prefix }}.10.0/24"
-        destination: "{{ network_prefix }}.50.4"
-        interface: "vlan10"
-        protocol: "tcp"
-        destination_port: "8888"
-        description: "Allow access to Zeek dashboard"
-        action: "pass"
-        sequence: 100
-        state: present
+# Note: Templates (local.zeek.j2, node.cfg.j2, zeek.service.j2, etc.)
+# and the zeek_install_plugin.yml task file need to be created.

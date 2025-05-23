@@ -98,6 +98,14 @@
   hosts: localhost
   gather_facts: false
   tasks:
+    - name: Load site configurations
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ item }}.yml"
+        name: "site_vars"
+      loop: "{{ sites | default(['site1', 'site2']) }}"
+      loop_control:
+        label: "{{ item }}"
+
     - name: Deployment summary
       ansible.builtin.debug:
         msg:
@@ -106,16 +114,14 @@
           - "==================================================="
           - "API credentials have been saved to: {{ playbook_dir }}/../credentials/"
           - "Main services deployed:"
-          - "  - OPNsense firewall with Tailscale: {{ item.prefix }}.50.1"
-          - "  - Omada Controller: {{ item.prefix }}.50.2"
-          - "  - Zeek Security Monitor: {{ item.prefix }}.50.4"
-          - "  - Proxmox Management: {{ item.prefix }}.50.10"
+          - "  - OPNsense firewall with Tailscale: {{ site_vars[item].network_prefix }}.50.1"
+          - "  - Omada Controller: {{ site_vars[item].network_prefix }}.50.2"
+          - "  - Zeek Security Monitor: {{ site_vars[item].network_prefix }}.50.4"
+          - "  - Proxmox Management: {{ site_vars[item].network_prefix }}.50.10"
           - "Security monitoring URLs:"
-          - "  - OPNsense Suricata: https://{{ item.prefix }}.50.1/ui/ids"
-          - "  - OPNsense Tailscale: https://{{ item.prefix }}.50.1/ui/tailscale"
-          - "  - Zeek Dashboard: http://{{ item.prefix }}.50.4:8888"
+          - "  - OPNsense Suricata: https://{{ site_vars[item].network_prefix }}.50.1/ui/ids"
+          - "  - OPNsense Tailscale: https://{{ site_vars[item].network_prefix }}.50.1/ui/tailscale"
+          - "  - Zeek Dashboard: http://{{ site_vars[item].network_prefix }}.50.4:8888"
           - "==================================================="
-      loop:
-        - { location: "Tennessee", prefix: "10.1" }
-        - { location: "Primary Home", prefix: "10.2" }
+      loop: "{{ sites | default(['site1', 'site2']) }}"
       tags: always

@@ -1,0 +1,17 @@
+# Ansible Managed: {{ ansible_managed }}
+{{ zeek_log_path }}/*.log {
+    daily
+    rotate {{ site_config.zeek.logrotate_keep_days | default(7) }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 {{ site_config.zeek.log_user | default('root') }} {{ site_config.zeek.log_group | default('root') }}
+    sharedscripts
+    postrotate
+        # Reload zeekctl to ensure logs are reopened if necessary
+        if [ -f {{ zeek_home }}/var/run/zeekctl.pid ]; then
+            {{ zeek_home }}/bin/zeekctl cron # 'cron' command often handles log reopening
+        fi
+    endscript
+}

@@ -1,97 +1,152 @@
 ---
 - name: Configure Suricata IDS/IPS in OPNsense
   hosts: opnsense
-  gather_facts: true
+  gather_facts: true # Keep gather_facts for access to inventory_hostname, ansible_user_dir etc.
   vars:
-    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
-    network_prefix: "{{ '10.1' if 'tennessee' in group_names else '10.2' }}"
+    default_suricata_rulesets:
+      - name: 'ET open/emerging-threats'
+        enabled: true
+        action: 'alert' # Default to alert, can be overridden by site_config
+        # OPNsense typically handles sub-categories of ET open via its GUI/API for that ruleset.
+        # If specific sub-rules need enabling/disabling it's often via the policy or rule modification features.
+      - name: 'ET open/botcc.rules'
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/compromised.rules'
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/drop.rules' # Consider if 'drop' is too aggressive by default
+        enabled: true
+        action: 'alert' # Defaulting to alert for safety, site can override to 'drop'
+      - name: 'ET open/dshield.rules'
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/exploit.rules' # Contains many exploit detection rules
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/malware.rules'
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/phishing.rules'
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/scan.rules'
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/ssh.rules' # Specific SSH rules
+        enabled: true
+        action: 'alert'
+      - name: 'ET open/rdp.rules' # Specific RDP rules
+        enabled: true
+        action: 'alert'
+      # Add other important ET open categories or other free rulesets like abuse.ch
+      - name: 'Abuse.ch ThreatFox IOC Feed'
+        enabled: true
+        action: 'alert'
+        # Assuming 'Abuse.ch ThreatFox IOC Feed' is a known ruleset name in OPNsense
+
+  pre_tasks:
+    - name: Determine site name from inventory hostname
+      ansible.builtin.set_fact:
+        site_name_from_inventory: "{{ inventory_hostname.split('-')[0] }}"
+      when: "'-' in inventory_hostname"
+
+    - name: Fail if site name cannot be determined from inventory hostname
+      ansible.builtin.fail:
+        msg: "Could not determine site name from inventory_hostname '{{ inventory_hostname }}'. Expected format: <site_name>-opnsense"
+      when: site_name_from_inventory is not defined
+
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ site_name_from_inventory }}.yml"
+      # Assuming this playbook is run from the 'ansible' directory relative to inventory.
+      # For robustness: file: "{{ inventory_dir }}/group_vars/{{ site_name_from_inventory }}.yml"
+
+    - name: Set site_config fact if not loaded directly by include_vars naming
+      ansible.builtin.set_fact:
+        site_config: "{{ hostvars[inventory_hostname].site_config }}"
+      when: site_config is not defined and hostvars[inventory_hostname].site_config is defined
+
+    - name: Fail if site_config is not loaded
+      ansible.builtin.fail:
+        msg: "Site_config for {{ site_name_from_inventory }} not loaded. Check group_vars/{{ site_name_from_inventory }}.yml."
+      when: site_config is not defined
+
+    - name: Set network_prefix from site_config
+      ansible.builtin.set_fact:
+        network_prefix: "{{ site_config.network_prefix }}"
+        # Ensure opnsense_api_key and opnsense_api_secret are set for ansibleguy.opnsense modules if not globally configured
+        opnsense_api_key: "{{ lookup('env', site_config.opnsense_api_key_env) | default(omit) }}"
+        opnsense_api_secret: "{{ lookup('env', site_config.opnsense_api_secret_env) | default(omit) }}"
+        opn_api_host: "{{ inventory_hostname }}" # opnsense modules need this
+        opn_ssl_verify: "{{ site_config.opnsense.ssl_verify | default(false) }}"
+
 
   tasks:
-    - name: Install IDS/IPS plugin
+    - name: Install os-suricata plugin if not present
       ansibleguy.opnsense.package:
         name: os-suricata
         state: present
 
-    - name: Configure IDS/IPS general settings
+    - name: Configure Suricata general settings
       ansibleguy.opnsense.ids_general:
-        enabled: true
-        ips: true
-        promisc: true
-        syslog_alerts: true
-        detect_version: true
-        clear_states: true
+        enabled: "{{ site_config.suricata.enabled | default(true) }}"
+        ips: "{{ site_config.suricata.ips_mode | default(true) }}"
+        promisc: "{{ site_config.suricata.promiscuous_mode | default(true) }}"
+        syslog_alerts: "{{ site_config.suricata.syslog_alerts | default(true) }}"
+        # Other general settings can be added here from site_config
 
-    - name: Configure IDS/IPS on WAN interface
+    # Configure Suricata policies on WAN interfaces
+    # Assumes site_config.opnsense.interfaces contains a 'role: wan' for WAN interfaces
+    # and 'name' is the OPNsense logical interface name (e.g., WAN, OPT1)
+    - name: Configure Suricata policies on WAN interfaces
       ansibleguy.opnsense.ids_policy_rule:
-        name: "WAN Protection - {{ location_prefix }}"
+        name: "WAN Protection ({{ wan_if.name }}) - {{ site_config.name }}"
         enabled: true
-        action: 'alert'
-        description: "Monitor WAN interface traffic"
-        interface: "wan"  # Primary WAN
-        policy: "default"
+        action: "{{ site_config.suricata.wan_policy_action | default('alert') }}"
+        description: "Monitor {{ wan_if.descr | default(wan_if.name) }} interface traffic"
+        interface: "{{ wan_if.name }}" # OPNsense logical interface name for WAN
+        policy: "{{ site_config.suricata.wan_policy_name | default('default') }}"
+      loop: "{{ site_config.opnsense.interfaces | selectattr('role', 'equalto', 'wan') | list }}"
+      loop_control:
+        loop_var: wan_if
+      when:
+        - site_config.opnsense.interfaces is defined
 
-    - name: Configure IDS/IPS on WAN2 interface (Starlink)
-      ansibleguy.opnsense.ids_policy_rule:
-        name: "Starlink Protection - {{ location_prefix }}"
-        enabled: true
-        action: 'alert'
-        description: "Monitor Starlink WAN interface traffic"
-        interface: "opt2"  # Starlink WAN
-        policy: "default"
-
-    - name: Download and enable ET Open ruleset
+    # Configure Suricata rulesets
+    - name: Configure Suricata rulesets
       ansibleguy.opnsense.ids_ruleset:
-        name: "et-open"
-        enabled: true
-        action: "alert"
+        name: "{{ item.name }}"
+        enabled: "{{ item.enabled | default(true) }}"
+        action: "{{ item.action | default('alert') }}"
+        # rules: item.rules | default(omit) # For custom rules within a ruleset definition
+      loop: "{{ default_suricata_rulesets + (site_config.suricata.rulesets | default([])) }}"
+      # Example site_config.suricata.rulesets to ADD or OVERRIDE defaults:
+      # - { name: 'ET open/exploit.rules', action: 'drop' } # Override default action for exploit.rules
+      # - { name: 'ET open/my-custom-et-category.rules', enabled: true, action: 'alert' } # Add a new one
+      # - { name: 'et-pro', enabled: true, action: 'drop' } # If you have ET Pro subscription
 
-    - name: Download and enable Abuse.ch ruleset
+    # Example for custom rules. These are often site/network specific.
+    # Consider managing these as part of site_config.suricata.custom_rules list of rule strings
+    - name: Configure site-specific custom Suricata rules
       ansibleguy.opnsense.ids_ruleset:
-        name: "abuse-ch"
-        enabled: true
-        action: "alert"
-
-    - name: Download and enable Emerging Threats ruleset (enable as block)
-      ansibleguy.opnsense.ids_ruleset:
-        name: "et-pro"
-        enabled: true
-        action: "drop"
-
-    - name: Configure additional IDS settings for home networks
-      ansibleguy.opnsense.ids_ruleset:
-        name: "custom-rules"
-        enabled: true
-        action: "alert"
+        name: "custom-site-rules-{{ site_config.name }}"
+        description: "Custom Suricata rules for {{ site_config.display_name | default(site_config.name) }}"
+        enabled: "{{ site_config.suricata.custom_rules_enabled | default(true) }}"
+        action: "{{ site_config.suricata.custom_rules_action | default('alert') }}"
         rules: |
-          # Detect password brute force attempts
-          alert tcp any any -> {{ network_prefix }}.0.0/16 22 \
-            (msg:"SSH brute force attempt"; flow:to_server; \
-            threshold: type threshold, track by_src, count 5, seconds 60; \
-            classtype:attempted-admin; sid:10000001; rev:1;)
-          alert tcp any any -> {{ network_prefix }}.0.0/16 3389 \
-            (msg:"RDP brute force attempt"; flow:to_server; \
-            threshold: type threshold, track by_src, count 5, seconds 60; \
-            classtype:attempted-admin; sid:10000002; rev:1;)
+          {{ site_config.suricata.custom_rules_content | default('') }}
+          # Example rule using network_prefix, if custom_rules_content doesn't already have it.
+          # alert tcp any any -> {{ network_prefix }}.0.0/16 22 \\
+          #  (msg:"SSH brute force on {{ site_config.name }}"; flow:to_server; \\
+          #   threshold: type threshold, track by_src, count 5, seconds 60; \\
+          #   classtype:attempted-admin; sid:{{ 10000000 + site_config.name | length }}; rev:1;) # Example dynamic SID
+      when: site_config.suricata.custom_rules_content is defined and site_config.suricata.custom_rules_content | length > 0
 
-          # Alert on known malicious traffic
-          alert tcp any any -> {{ network_prefix }}.0.0/16 any \
-            (msg:"Possible C&C traffic detected"; flow:to_server,established; \
-            content:"POST"; http_method; content:"/gate.php"; http_uri; \
-            classtype:trojan-activity; sid:10000003; rev:1;)
-
-          # Alert on suspicious outbound connections
-          alert tcp {{ network_prefix }}.0.0/16 any -> any 6667 \
-            (msg:"IRC traffic detected - possible bot"; flow:to_server,established; \
-            classtype:policy-violation; sid:10000004; rev:1;)
-
-          # Alert on potential data exfiltration
-          alert tcp {{ network_prefix }}.0.0/16 any -> any any \
-            (msg:"Large outbound file transfer"; flow:to_server,established; \
-            byte_test:>500000,>,0,relative; \
-            threshold: type threshold, track by_src, count 3, seconds 300; \
-            classtype:suspicious-filename-detect; sid:10000005; rev:1;)
-
-    - name: Configure IDS anomaly detection settings
-      ansibleguy.opnsense.ids_action:
-        name: "reload_rules"
-        state: present
+    # Reload rules might be implicitly handled by ids_ruleset or ids_policy_rule modules.
+    # If not, an explicit reload action might be needed.
+    # - name: Reload Suricata rules
+    #   ansibleguy.opnsense.ids_action:
+    #     name: "reload_rules" # Action name might vary, check OPNsense API or module docs
+    #     state: present # or use a command/uri module to trigger reload via API
+    #   when: suricata_config_changed # Register changes in previous tasks

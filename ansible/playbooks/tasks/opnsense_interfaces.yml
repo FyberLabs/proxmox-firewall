@@ -1,200 +1,128 @@
 ---
 # Configure OPNsense interfaces dynamically based on site configuration
 
-# Get site details based on inventory hostname or group
-- name: Determine site details
+- name: Assumed site_config is loaded by the calling playbook (e.g., 06_opnsense_setup.yml)
+  ansible.builtin.assert:
+    that:
+      - site_config is defined
+      - site_config.name is defined
+      - site_config.network_prefix is defined
+      - site_config.domain is defined
+      - site_config.opnsense is defined
+      - site_config.opnsense.interfaces is defined
+      - site_config.vlan_config is defined
+    fail_msg: "Required site_config variables are not defined. Ensure the calling playbook loads them correctly."
+
+- name: Set easier to use facts from site_config
   ansible.builtin.set_fact:
-    site_name: "{{ site_config.name }}"
-    site_display_name: "{{ site_config.display_name }}"
     network_prefix: "{{ site_config.network_prefix }}"
     domain: "{{ site_config.domain }}"
-    env_prefix: "{{ site_config.name | upper }}"
+    opnsense_interfaces: "{{ site_config.opnsense.interfaces }}"
+    vlan_config: "{{ site_config.vlan_config }}" # Expects a dictionary with VLAN IDs as keys
+    env_prefix_for_mac: "{{ site_config.name | upper }}"
+    # opn_api_host, opnsense_api_key, opnsense_api_secret should be set by the calling playbook
 
-# Configure WAN fiber gateway
-- name: Configure WAN Fiber Gateway
-  ansible.builtin.uri:
-    url: "https://{{ opn_api_host }}/api/routes/gateway/setItem/WAN_FIBER"
-    method: POST
-    user: "{{ opnsense_api_key }}"
-    password: "{{ opnsense_api_secret }}"
-    force_basic_auth: true
-    validate_certs: false
-    body_format: json
-    body:
-      gateway:
-        name: "WAN_FIBER"
-        interface: "wan"
-        gateway: ""  # Automatically detected
-        monitor: ""  # Default monitor
-        description: "Fiber (Primary)"
-        priority: "1"
-        weight: "1"
-        ipprotocol: "inet"
-        monitor_disable: "0"
-    status_code: [200, 201, 202]
-  register: wan_fiber_gateway
-
-# Configure WAN Starlink gateway
-- name: Configure WAN Starlink Gateway
-  ansible.builtin.uri:
-    url: "https://{{ opn_api_host }}/api/routes/gateway/setItem/WAN_STARLINK"
-    method: POST
-    user: "{{ opnsense_api_key }}"
-    password: "{{ opnsense_api_secret }}"
-    force_basic_auth: true
-    validate_certs: false
-    body_format: json
-    body:
-      gateway:
-        name: "WAN_STARLINK"
-        interface: "opt2"  # Starlink interface
-        gateway: ""  # Automatically detected
-        monitor: ""  # Default monitor
-        description: "Starlink (Backup)"
-        priority: "2"
-        weight: "1"
-        ipprotocol: "inet"
-        monitor_disable: "0"
-    status_code: [200, 201, 202]
-  register: wan_starlink_gateway
-
+# Configure physical interfaces based on site_config.opnsense.interfaces
+# Ensure opn_api_host, opnsense_api_key, opnsense_api_secret are available in the environment
+# or set by the calling playbook (06_opnsense_setup.yml does this)
 - name: Configure physical interfaces
   ansibleguy.opnsense.interface:
-    name: "{{ item.name }}"
-    device: "{{ item.device }}"
+    name: "{{ item.name }}"         # OPNsense logical name (e.g., LAN, WAN, OPT1)
+    device: "{{ item.device }}"     # FreeBSD device name (e.g., igb0, vtnet0)
     descr: "{{ item.descr }}"
     enable: true
-  loop: "{{ opnsense.interfaces }}"
+    # type, ipv4_address, ipv4_prefixlen for static assignment on physical if needed
+    type: "{{ item.type | default(omit) }}"
+    ipv4_address: "{{ item.ipv4_address | default(omit) }}"
+    ipv4_prefixlen: "{{ item.ipv4_prefixlen | default(omit) }}"
+  loop: "{{ opnsense_interfaces }}"
+  loop_control:
+    loop_var: item
 
-# Configure VLANs
+# Configure VLANs based on site_config.vlan_config
 - name: Configure VLANs
   ansibleguy.opnsense.vlan:
-    device: "{{ item.device }}"
+    # device is the parent interface (e.g., 'lan' or a specific physical interface name like 'igb1')
+    device: "{{ vlan_config[item.tag | string].parent_interface | default(site_config.opnsense.default_vlan_parent_interface | default('lan')) }}"
     tag: "{{ item.tag }}"
-    descr: "{{ item.descr }}"
+    descr: "VLAN{{ item.tag }} - {{ item.name }} ({{ network_prefix }}.{{ item.tag }}.0/24)"
     enable: true
-  loop:
-    - device: lan
-      tag: 10
-      descr: "VLAN10 - {{ vlan_config.10.name }} ({{ network_prefix }}.10.0/24)"
-    - device: lan
-      tag: 30
-      descr: "VLAN30 - {{ vlan_config.30.name }} ({{ network_prefix }}.30.0/24)"
-    - device: lan
-      tag: 40
-      descr: "VLAN40 - {{ vlan_config.40.name }} ({{ network_prefix }}.40.0/24)"
-    - device: lan
-      tag: 50
-      descr: "VLAN50 - {{ vlan_config.50.name }} ({{ network_prefix }}.50.0/24)"
-    - device: opt1
-      tag: 20
-      descr: "VLAN20 - {{ vlan_config.20.name }} ({{ network_prefix }}.20.0/24)"
+  loop: "{{ vlan_config | dict2items | map(attribute='value') | map('combine', {'tag': item.key}) | list }}" # Creates a list of dicts with tag and name
+  loop_control:
+    loop_var: item # item will be like { name: "Main LAN", tag: 10, devices: { ... } }
 
-# Configure interface IPs
-- name: Configure interface IP assignments
+# Configure interface IP assignments (for VLANs and potentially some physical interfaces if not DHCP)
+- name: Configure interface IP assignments for VLANs
   ansibleguy.opnsense.interface_ip:
-    interface: "{{ item.interface }}"
-    type: "{{ item.type }}"
+    interface: "vlan{{ item.tag }}" # OPNsense logical interface name for the VLAN
+    type: "static"
+    ipv4_address: "{{ network_prefix }}.{{ item.tag }}.1" # Default gateway for the VLAN
+    ipv4_prefixlen: 24
+    apply: true
+  loop: "{{ vlan_config | dict2items | map(attribute='value') | map('combine', {'tag': item.key}) | list }}"
+  loop_control:
+    loop_var: item # item will be like { name: "Main LAN", tag: 10, ... }
+
+# Configure specific IP assignments for interfaces that are not VLANs (e.g., WANs if static, mgmt interfaces)
+# This supplements the physical interface setup if more detail is needed than ansibleguy.opnsense.interface provides for IP.
+# Example: Proxmox management interface if it's a dedicated interface on OPNsense
+- name: Configure specific static interface IP assignments (non-VLAN)
+  ansibleguy.opnsense.interface_ip:
+    interface: "{{ item.name }}" # OPNsense logical name from site_config.opnsense.interfaces
+    type: "{{ item.type }}" # e.g. static, dhcp
     ipv4_address: "{{ item.ipv4_address | default(omit) }}"
     ipv4_prefixlen: "{{ item.ipv4_prefixlen | default(omit) }}"
     apply: true
-  loop:
-    - interface: lan
-      type: none
-    - interface: wan
-      type: dhcp
-    - interface: opt1
-      type: none
-    - interface: opt2
-      type: dhcp
-    - interface: pxmg
-      type: static
-      ipv4_address: "{{ network_prefix }}.50.1"
-      ipv4_prefixlen: 24
-    - interface: vlan10
-      type: static
-      ipv4_address: "{{ network_prefix }}.10.1"
-      ipv4_prefixlen: 24
-    - interface: vlan20
-      type: static
-      ipv4_address: "{{ network_prefix }}.20.1"
-      ipv4_prefixlen: 24
-    - interface: vlan30
-      type: static
-      ipv4_address: "{{ network_prefix }}.30.1"
-      ipv4_prefixlen: 24
-    - interface: vlan40
-      type: static
-      ipv4_address: "{{ network_prefix }}.40.1"
-      ipv4_prefixlen: 24
-    - interface: vlan50
-      type: static
-      ipv4_address: "{{ network_prefix }}.50.254"
-      ipv4_prefixlen: 24
-
-# Configure DHCP servers for each VLAN
-- name: Configure DHCP servers
-  ansibleguy.opnsense.dhcp_subnet:
-    interface: "{{ item.interface }}"
-    enabled: true
-    range_from: "{{ item.range_from }}"
-    range_to: "{{ item.range_to }}"
-    gateway: "{{ item.gateway }}"
-    domain: "{{ domain }}"
-    dns_servers: ["{{ network_prefix }}.10.1"]
-  loop:
-    - interface: vlan10
-      range_from: "{{ network_prefix }}.10.100"
-      range_to: "{{ network_prefix }}.10.254"
-      gateway: "{{ network_prefix }}.10.1"
-    - interface: vlan20
-      range_from: "{{ network_prefix }}.20.10"
-      range_to: "{{ network_prefix }}.20.254"
-      gateway: "{{ network_prefix }}.20.1"
-    - interface: vlan30
-      range_from: "{{ network_prefix }}.30.100"
-      range_to: "{{ network_prefix }}.30.254"
-      gateway: "{{ network_prefix }}.30.1"
-    - interface: vlan40
-      range_from: "{{ network_prefix }}.40.100"
-      range_to: "{{ network_prefix }}.40.254"
-      gateway: "{{ network_prefix }}.40.1"
-    - interface: vlan50
-      range_from: "{{ network_prefix }}.50.100"
-      range_to: "{{ network_prefix }}.50.253"
-      gateway: "{{ network_prefix }}.50.254"
-
-# Create dynamic list of DHCP static mappings based on site config
-- name: Generate DHCP static mapping list
-  ansible.builtin.set_fact:
-    dhcp_reservations: >-
-      {{ dhcp_reservations | default([]) + [
-        {
-          'interface': 'vlan' + vlan|string,
-          'mac': lookup('env', env_prefix + '_' + device|upper + '_MAC'),
-          'ip': network_prefix + '.' + vlan|string + '.' + vlan_config[vlan|int].devices[device].ip_suffix,
-          'hostname': device,
-          'descr': vlan_config[vlan|int].devices[device].description
-        }
-      ] }}
-  loop: "{{ vlan_device_pairs }}"
+  loop: "{{ opnsense_interfaces | selectattr('type', 'defined') | list }}" # only loop if type is specified for IP config
   loop_control:
-    loop_var: item_pair
+    loop_var: item
+
+
+# Configure DHCP servers for each VLAN that needs it
+- name: Configure DHCP servers for VLANs
+  ansibleguy.opnsense.dhcp_subnet:
+    interface: "vlan{{ item.tag }}"
+    enabled: "{{ vlan_config[item.tag | string].dhcp.enabled | default(true) }}"
+    range_from: "{{ vlan_config[item.tag | string].dhcp.range_from | default(network_prefix + '.' + (item.tag|string) + '.100') }}"
+    range_to: "{{ vlan_config[item.tag | string].dhcp.range_to | default(network_prefix + '.' + (item.tag|string) + '.254') }}"
+    gateway: "{{ network_prefix }}.{{ item.tag }}.1" # Assumes VLAN gateway is .1
+    domain: "{{ domain }}"
+    # DNS servers can be made configurable via site_config.vlan_config[item.tag].dhcp.dns_servers
+    dns_servers: "{{ vlan_config[item.tag | string].dhcp.dns_servers | default([network_prefix + '.' + (item.tag|string) + '.1']) }}"
+  loop: "{{ vlan_config | dict2items | map(attribute='value') | map('combine', {'tag': item.key}) | list }}"
+  loop_control:
+    loop_var: item
+  when: "vlan_config[item.tag | string].dhcp is defined or vlan_config[item.tag | string].dhcp.enabled | default(true)"
+
+
+# Prepare DHCP static mappings based on site_config.vlan_config.<vlan_id>.devices
+- name: Generate list of DHCP static reservations
+  ansible.builtin.set_fact:
+    dhcp_static_reservations: "{{ dhcp_static_reservations | default([]) + reservation_details_list }}"
   vars:
-    vlan: "{{ item_pair.0 }}"
-    device: "{{ item_pair.1 }}"
-    vlan_device_pairs: >-
-      {{ vlan_config | dict2items |
-         selectattr('value.devices', 'defined') |
-         map(attribute='value.devices') | list |
-         zip_longest(vlan_config | dict2items |
-                    selectattr('value.devices', 'defined') |
-                    map(attribute='key')|list) |
-         map('reverse')|list }}
-  when: lookup('env', env_prefix + '_' + device|upper + '_MAC')|default('') != ''
+    reservation_details_list: >-
+      {% set reservations = [] %}
+      {% for vlan_id, vlan_data in vlan_config.items() %}
+        {% if vlan_data.devices is defined %}
+          {% for device_name, device_info in vlan_data.devices.items() %}
+            {% set mac_address = lookup('env', env_prefix_for_mac + '_' + device_name | upper + '_MAC') %}
+            {% if mac_address %}
+              {% set reservation = {
+                  'interface': 'vlan' + vlan_id|string,
+                  'mac': mac_address,
+                  'ip': network_prefix + '.' + vlan_id|string + '.' + device_info.ip_suffix|string,
+                  'hostname': device_name,
+                  'descr': device_info.description | default(device_name)
+              } %}
+              {% set _ = reservations.append(reservation) %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% endfor %}
+      {{ reservations }}
 
 # Configure DHCP static mappings
-- name: Configure DHCP static mappings
+- name: Configure DHCP static mappings from generated list
   ansibleguy.opnsense.dhcp_reservation:
     interface: "{{ item.interface }}"
     mac: "{{ item.mac }}"
@@ -202,5 +130,10 @@
     hostname: "{{ item.hostname }}"
     descr: "{{ item.descr }}"
     state: present
-  loop: "{{ dhcp_reservations }}"
-  when: dhcp_reservations is defined
+  loop: "{{ dhcp_static_reservations | default([]) }}"
+  when: dhcp_static_reservations is defined and dhcp_static_reservations | length > 0
+
+# Note: WAN gateway configuration (WAN_FIBER, WAN_STARLINK) was removed from here.
+# It should be handled by the main playbook (06_opnsense_setup.yml) as it's more related to overall WAN strategy
+# and might involve more than just interface setup (like gateway groups).
+# The main playbook already has sections for WAN failover.

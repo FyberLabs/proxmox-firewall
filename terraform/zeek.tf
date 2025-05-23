@@ -1,12 +1,13 @@
 # Zeek Network Security Monitor VM
 
 resource "proxmox_vm_qemu" "zeek" {
-  name        = "zeek-${var.location}"
-  desc        = "Zeek Network Security Monitor for ${var.location}"
+  count       = var.vm_templates["zeek"].enabled ? 1 : 0
+  name        = "zeek-${var.site_name}"
+  desc        = "Zeek Network Security Monitor for ${var.site_display_name}"
   target_node = var.target_node
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
-  
+
   cores       = 2
   sockets     = 1
   memory      = 4096
@@ -15,8 +16,8 @@ resource "proxmox_vm_qemu" "zeek" {
   # Cloud-init settings
   ipconfig0   = "ip=${var.network_prefix}.50.4/24,gw=${var.network_prefix}.50.254"
   nameserver  = "${var.network_prefix}.10.1"
-  searchdomain = "${var.location_domain}"
-  
+  searchdomain = "${var.domain}"
+
   # Network interfaces:
   # First interface: Management (on VLAN50)
   network {
@@ -24,14 +25,14 @@ resource "proxmox_vm_qemu" "zeek" {
     bridge   = "vmbr0"
     tag      = 50
   }
-  
+
   # Second interface: Monitor WAN (in promiscuous mode) - connect to vmbr1
   network {
     model    = "virtio"
     bridge   = "vmbr1"
     firewall = false
   }
-  
+
   # Third interface: Monitor Starlink WAN (in promiscuous mode) - connect to vmbr3
   network {
     model    = "virtio"
@@ -70,9 +71,13 @@ resource "proxmox_vm_qemu" "zeek" {
     backup       = true
   }
 
+  # VM settings
+  onboot = true
+  oncreate = var.vm_templates["zeek"].start_on_deploy
+
   lifecycle {
     ignore_changes = [
       network,
     ]
   }
-} 
+}

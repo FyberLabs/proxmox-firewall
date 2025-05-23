@@ -21,3 +21,24 @@ provider "proxmox" {
   pm_api_token_secret = var.proxmox_api_secret
   pm_tls_insecure = true
 }
+
+# Local variables for VM template configuration
+locals {
+  # Get VM template configuration from tfvars
+  vm_templates = var.vm_templates
+
+  # Create a map of enabled templates
+  enabled_templates = {
+    for name, config in local.vm_templates : name => config
+    if config.enabled
+  }
+}
+
+# The VM resources are defined in their respective .tf files:
+# - opnsense.tf
+# - omada.tf
+# - zeek.tf
+# - tailscale.tf (to be created)
+
+# We use count to control whether each VM is created based on the enabled_templates map
+# The start_on_deploy parameter is handled in each VM's configuration

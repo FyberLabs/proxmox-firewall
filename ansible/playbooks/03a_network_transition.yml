@@ -4,7 +4,7 @@
   become: true
   vars:
     # Determine location-specific values
-    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    location_prefix: "{{ site_config.name | upper }}"
     old_ip: "{{ lookup('env', location_prefix + '_PROXMOX_IP') }}"
     network_prefix: "{{ lookup('env', location_prefix + '_NETWORK_PREFIX') }}"
     mgmt_ip: "{{ network_prefix }}.50.10"

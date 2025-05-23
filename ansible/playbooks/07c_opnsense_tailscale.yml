@@ -3,223 +3,186 @@
   hosts: opnsense
   gather_facts: false
   vars:
-    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
-    network_prefix: "{{ '10.1' if 'tennessee' in group_names else '10.2' }}"
-    tailscale_auth_key: "{{ lookup('env', 'TF_VAR_tailscale_auth_key') }}"
-    opnsense_ip: "{{ lookup('env', location_prefix + '_OPNSENSE_IP') }}"
-    opnsense_api_key: "{{ lookup('env', location_prefix + '_OPNSENSE_API_KEY') }}"
-    opnsense_api_secret: "{{ lookup('env', location_prefix + '_OPNSENSE_API_SECRET') }}"
-    advertised_routes:
-      TN: "10.1.0.0/16"
-      PH: "10.2.0.0/16"
+    tailscale_interface_name: "tailscale0" # Default, can be overridden by site_config.tailscale.interface_name
+    default_tailscale_firewall_rules:
+      - description: "Allow DNS from Tailscale network to OPNsense (Tailscale interface)"
+        interface: "{{ tailscale_interface_name }}" # Use the variable
+        direction: "in"
+        action: "pass"
+        protocol: "tcp/udp" # DNS uses both
+        source_net: "{{ site_config.tailscale.network | default('100.64.0.0/10') }}" # Tailscale CGNAT range, or site_config override
+        destination_net: "{{ tailscale_interface_name }}ip" # OPNsense keyword for interface IP
+        destination_port_range: "53"
+        log: "{{ site_config.tailscale.log_default_rules | default(false) }}"
+        enabled: true
+      # Example: Allow Tailscale network to access OPNsense web UI (if desired, use with caution)
+      # - description: "Allow Tailscale net to OPNsense WebUI (Tailscale interface)"
+      #   interface: "{{ tailscale_interface_name }}"
+      #   direction: "in"
+      #   action: "pass"
+      #   protocol: "tcp"
+      #   source_net: "{{ site_config.tailscale.network | default('100.64.0.0/10') }}"
+      #   destination_net: "{{ tailscale_interface_name }}ip"
+      #   destination_port_range: "{{ site_config.opnsense.gui_port | default(443) }}"
+      #   log: true
+      #   enabled: false # Disabled by default for security
+    # opn_api_host, opnsense_api_key, opnsense_api_secret, tailscale_auth_key, network_prefix
+    # will be set in pre_tasks from site_config and environment variables.
+
+  pre_tasks:
+    - name: Determine site name from inventory hostname
+      ansible.builtin.set_fact:
+        site_name_from_inventory: "{{ inventory_hostname.split('-')[0] }}"
+      when: "'-' in inventory_hostname"
+
+    - name: Fail if site name cannot be determined from inventory hostname
+      ansible.builtin.fail:
+        msg: "Could not determine site name from inventory_hostname '{{ inventory_hostname }}'. Expected format: <site_name>-opnsense"
+      when: site_name_from_inventory is not defined
+
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ site_name_from_inventory }}.yml"
+
+    - name: Set site_config fact if not loaded directly
+      ansible.builtin.set_fact:
+        site_config: "{{ hostvars[inventory_hostname].site_config }}"
+      when: site_config is not defined and hostvars[inventory_hostname].site_config is defined
+
+    - name: Fail if site_config is not loaded
+      ansible.builtin.fail:
+        msg: "Failed to load site_config for {{ site_name_from_inventory }}."
+      when: site_config is not defined
+
+    - name: Set Tailscale and OPNsense API configuration variables
+      ansible.builtin.set_fact:
+        network_prefix: "{{ site_config.network_prefix }}"
+        opnsense_api_key: "{{ lookup('env', site_config.opnsense_api_key_env) | default(omit) }}"
+        opnsense_api_secret: "{{ lookup('env', site_config.opnsense_api_secret_env) | default(omit) }}"
+        opn_api_host: "{{ inventory_hostname }}"
+        opn_ssl_verify: "{{ site_config.opnsense.ssl_verify | default(false) }}"
+        tailscale_auth_key: >-
+          {{ lookup('env',
+                     site_config.tailscale.auth_key_env | default('TF_VAR_tailscale_auth_key')) }}
+        # tailscale_auth_key: "{{ site_config.tailscale.auth_key | default(lookup('env', 'TF_VAR_tailscale_auth_key')) }}" # Alternative
+
+    - name: Configure site-specific Tailscale firewall rules (data-driven)
+      ansibleguy.opnsense.firewall_rule:
+        description: "{{ item.description | default('Tailscale rule for ' + site_config.name) }}"
+        interface: "{{ item.interface }}" # e.g., tailscale0, vlan10, etc.
+        direction: "{{ item.direction | default('in') }}"
+        action: "{{ item.action | default('pass') }}"
+        protocol: "{{ item.protocol | default('any') }}"
+        source_net: "{{ item.source_net }}"
+        destination_net: "{{ item.destination_net }}"
+        destination_port_range: "{{ item.destination_port_range | default(omit) }}"
+        log: "{{ item.log | default(site_config.tailscale.log_custom_rules | default(false)) }}"
+        enabled: "{{ item.enabled | default(true) }}"
+      loop: "{{ default_tailscale_firewall_rules + (site_config.tailscale.firewall_rules | default([])) }}"
+      # Example site_config.tailscale.firewall_rules:
+      # - { interface: '{{ tailscale_interface_name }}', source_net: '{{ site_config.tailscale.network | default("100.64.0.0/10") }}',
 
   tasks:
     - name: Check if Tailscale Auth Key is set
       ansible.builtin.fail:
-        msg: "Tailscale Auth Key (TF_VAR_tailscale_auth_key) is not set in your .env file"
+        msg: "Tailscale Auth Key (e.g., TF_VAR_tailscale_auth_key or as defined in site_config.tailscale.auth_key_env) is not set."
       when: tailscale_auth_key is not defined or tailscale_auth_key == ""
 
     - name: Check if OPNsense API credentials are set
       ansible.builtin.fail:
-        msg: "OPNsense API credentials ({{ location_prefix }}_OPNSENSE_API_KEY and {{ location_prefix }}_OPNSENSE_API_SECRET) are not set in your .env file"
+        msg: "OPNsense API credentials (defined by site_config.opnsense_api_key_env and site_config.opnsense_api_secret_env) are not set."
       when: opnsense_api_key is not defined or opnsense_api_key == "" or opnsense_api_secret is not defined or opnsense_api_secret == ""
 
-    - name: Install os-tailscale plugin
+    - name: Ensure os-tailscale plugin is installed (using ansibleguy.opnsense module)
+      ansibleguy.opnsense.package:
+        name: os-tailscale
+        state: present
+      # Consider adding notify for service reload if this module doesn't handle it.
+
+    - name: Configure Tailscale Service (using ansibleguy.opnsense module if available, fallback to URI)
+      # Attempt to use ansibleguy.opnsense.tailscale_general if it exists and supports these settings.
+      # For now, sticking to URI to match original playbook structure, but this is a candidate for module usage.
       ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/core/firmware/install/os-tailscale"
+        url: "https://{{ opn_api_host }}/api/tailscale/service/set"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
         force_basic_auth: true
-        validate_certs: false
-        status_code: [200, 201, 202]
-        headers:
-          Content-Type: "application/json"
-      register: plugin_install_result
-      failed_when: false
-
-    - name: Wait for plugin installation to complete
-      ansible.builtin.pause:
-        seconds: 10
-
-    - name: Configure Tailscale Service
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/tailscale/service/set"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
+        validate_certs: "{{ opn_ssl_verify }}"
         body_format: json
         body:
           service:
-            enabled: "1"
+            enabled: "{{ site_config.tailscale.enabled | default(true) | ternary('1','0') }}"
             auth_key: "{{ tailscale_auth_key }}"
-            advertise_routes: "{{ advertised_routes[location_prefix] }}"
-            accept_routes: "1"
-            hostname: "opnsense-{{ location_prefix | lower }}"
-            advertise_exit_node: "0"  # We don't want to advertise as an exit node by default
-            exit_node_allow: "1"      # But allow using other exit nodes
-            use_exit_node: "0"        # Don't use an exit node by default
-            up_flags: "--advertise-routes={{ advertised_routes[location_prefix] }} --accept-routes"
-            interfacemap: "internal:vlan10"  # Map internal interface to VLAN 10
+            advertise_routes: "{{ site_config.tailscale.advertised_routes | default([]) | join(',') }}"
+            accept_routes: "{{ site_config.tailscale.accept_routes | default(true) | ternary('1','0') }}"
+            hostname: "{{ site_config.tailscale.hostname | default('opnsense-' + site_config.name) }}"
+            advertise_exit_node: "{{ site_config.tailscale.advertise_exit_node | default(false) | ternary('1','0') }}"
+            exit_node_allow: "{{ site_config.tailscale.exit_node_allow_lan_access | default(true) | ternary('1','0') }}" # Name might differ in API
+            use_exit_node: "{{ site_config.tailscale.use_exit_node_ip | default('') != '' | ternary('1','0') }}"
+            exit_node: "{{ site_config.tailscale.use_exit_node_ip | default('') }}"
+            # up_flags: >-
+            #   {{ site_config.tailscale.up_flags |
+            #      default('--accept-routes --advertise-routes=' +
+            #              (site_config.tailscale.advertised_routes | default([]) | join(','))) }}
+            # interfacemap might need specific handling if used
         status_code: [200, 201, 202]
-      register: tailscale_config
+      notify: Reload Tailscale Service # Handler to apply changes
 
-    - name: Enable Tailscale Service
+    - name: Allow Tailscale WireGuard traffic on WAN interfaces (using ansibleguy.opnsense module)
+      ansibleguy.opnsense.firewall_rule:
+        description: "Allow Tailscale Inbound on {{ wan_if.name }} for {{ site_config.name }}"
+        interface: "{{ wan_if.name }}" # Logical name of the WAN interface
+        direction: "in"
+        action: "pass"
+        protocol: "udp"
+        source_net: "any"
+        destination_net: "any" # Or WAN IP alias
+        destination_port_range: "{{ site_config.tailscale.port | default('41641') }}"
+        log: "{{ site_config.tailscale.log_wan_rule | default(false) }}"
+        enabled: true
+      loop: "{{ site_config.opnsense.interfaces | selectattr('role', 'equalto', 'wan') | list }}"
+      loop_control:
+        loop_var: wan_if
+      when: site_config.opnsense.interfaces is defined
+      notify: Apply Firewall Changes # Handler
+
+    - name: Configure site-specific Tailscale firewall rules (data-driven)
+      ansibleguy.opnsense.firewall_rule:
+        description: "{{ item.description | default('Tailscale rule for ' + site_config.name) }}"
+        interface: "{{ item.interface }}" # e.g., tailscale0, vlan10, etc.
+        direction: "{{ item.direction | default('in') }}"
+        action: "{{ item.action | default('pass') }}"
+        protocol: "{{ item.protocol | default('any') }}"
+        source_net: "{{ item.source_net }}"
+        destination_net: "{{ item.destination_net }}"
+        destination_port_range: "{{ item.destination_port_range | default(omit) }}"
+        log: "{{ item.log | default(site_config.tailscale.log_custom_rules | default(false)) }}"
+        enabled: "{{ item.enabled | default(true) }}"
+      loop: "{{ default_tailscale_firewall_rules + (site_config.tailscale.firewall_rules | default([])) }}"
+      # Example site_config.tailscale.firewall_rules:
+      # - { interface: '{{ tailscale_interface_name }}', source_net: '{{ site_config.tailscale.network | default("100.64.0.0/10") }}',
+      notify: Apply Firewall Changes # Handler
+
+  handlers:
+    - name: Reload Tailscale Service
       ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/tailscale/service/reconfigure"
+        url: "https://{{ opn_api_host }}/api/tailscale/service/reconfigure"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
         force_basic_auth: true
-        validate_certs: false
+        validate_certs: "{{ opn_ssl_verify }}"
         status_code: [200, 201, 202]
-      register: tailscale_enable
-
-    - name: Add Firewall Rules for Tailscale
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        body_format: json
-        body:
-          rule:
-            enabled: "1"
-            action: "pass"
-            interface: "wan"  # Apply to WAN interfaces
-            ipprotocol: "inet"
-            protocol: "udp"
-            source: "any"
-            destination: "any:41641"  # Tailscale WireGuard port
-            description: "Allow Tailscale WireGuard"
-            log: "0"  # Don't log for performance
-        status_code: [200, 201, 202]
-      register: tailscale_fw_rule
+      listen: "Reload Tailscale Service"
 
     - name: Apply Firewall Changes
       ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/apply"
+        url: "https://{{ opn_api_host }}/api/firewall/filter/apply"
         method: POST
         user: "{{ opnsense_api_key }}"
         password: "{{ opnsense_api_secret }}"
         force_basic_auth: true
-        validate_certs: false
+        validate_certs: "{{ opn_ssl_verify }}"
         status_code: [200, 201, 202]
-      register: apply_fw
-
-    # Add Firewall ACLs for cross-site access
-    - name: Add ACL Rules for Cross-Site Access (VLAN 10 - Main LAN)
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        body_format: json
-        body:
-          rule:
-            enabled: "1"
-            action: "pass"
-            interface: "lan"  # VLAN10 interface
-            ipprotocol: "inet"
-            protocol: "any"
-            source: "{{ network_prefix }}.10.0/24"  # Local Main LAN
-            destination: "{{ '10.2.10.0/24' if network_prefix == '10.1' else '10.1.10.0/24' }}"  # Remote Main LAN
-            description: "Allow Cross-Site Main LAN Access via Tailscale"
-        status_code: [200, 201, 202]
-      register: cross_site_lan_rule
-
-    # Allow cross-site NAS access (Primary Home to/from Tennessee)
-    - name: Add ACL Rules for NAS Access
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        body_format: json
-        body:
-          rule:
-            enabled: "1"
-            action: "pass"
-            interface: "lan"
-            ipprotocol: "inet"
-            protocol: "tcp"
-            source: "{{ '10.1.10.0/24' if network_prefix == '10.2' else network_prefix }}.10.0/24"
-            destination: "{{ '10.2.10.100' if network_prefix == '10.1' else network_prefix }}.10.100:445,2049"
-            description: "Allow NAS Access (SMB/NFS) via Tailscale"
-        status_code: [200, 201, 202]
-      register: nas_access_rule
-      when: network_prefix == "10.1" or (network_prefix == "10.2" and lookup('env', 'PH_NAS_IP', default='') != '')
-
-    # Allow cross-site Home Assistant access
-    - name: Add ACL Rules for Home Assistant Access
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        body_format: json
-        body:
-          rule:
-            enabled: "1"
-            action: "pass"
-            interface: "lan"
-            ipprotocol: "inet"
-            protocol: "tcp"
-            source: "{{ network_prefix }}.10.0/24"
-            destination: "{{ '10.2.10.10' if network_prefix == '10.1' else '10.1.10.10' }}:8123"
-            description: "Allow Home Assistant Access via Tailscale"
-        status_code: [200, 201, 202]
-      register: homeassistant_access_rule
-
-    # Allow Management VLAN cross-site access for Omada Controllers
-    - name: Add ACL Rules for Omada Cross-Site Management
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/addRule"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        body_format: json
-        body:
-          rule:
-            enabled: "1"
-            action: "pass"
-            interface: "opt1"  # Management VLAN interface
-            ipprotocol: "inet"
-            protocol: "tcp/udp"
-            source: "{{ network_prefix }}.50.2"  # Local Omada Controller
-            destination: "{{ '10.2' if network_prefix == '10.1' else '10.1' }}.0.0/16"  # All subnets in other location
-            description: "Allow Omada Controller Cross-Site Management"
-        status_code: [200, 201, 202]
-      register: omada_mgmt_rule
-
-    - name: Apply Firewall Changes Again
-      ansible.builtin.uri:
-        url: "https://{{ opnsense_ip }}/api/firewall/filter/apply"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: false
-        status_code: [200, 201, 202]
-      register: apply_fw_again
-
-    - name: Display Tailscale Status
-      ansible.builtin.debug:
-        msg:
-          - "Tailscale has been configured on OPNsense at {{ opnsense_ip }}"
-          - "Advertising routes: {{ advertised_routes[location_prefix] }}"
-          - "Hostname: opnsense-{{ location_prefix | lower }}"
-          - "Firewall rules have been added to allow Tailscale connectivity"
-          - "Cross-site access has been configured for Main LAN, NAS, and Home Assistant"
+      listen: "Apply Firewall Changes"

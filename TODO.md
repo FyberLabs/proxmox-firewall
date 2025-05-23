@@ -19,21 +19,24 @@
 
 ## Refactor terraform for site config control
 
-- Generate/include tfvars from site config and generate a template for it as part of ansible before terraform
-- Setup the tfstate backend in ansible before terraform
-- Make VM template deployment selectable in site config, ie. all templates deploy to proxmox, but not all are started as VMs
+- ✅ Generate/include tfvars from site config and generate a template for it as part of ansible before actual terraform runs
+- ✅ Setup the tfstate backend in ansible before terraform
+- ✅ Make VM template deployment selectable in site config, ie. all templates deploy to proxmox, but not all are started as VMs
 
 ## Ansible Refactor
 
 - Include in site generation missing ansible vars from env too
 - Remove environment use then if possible
 - Remove Tennessee and Primary Home references
+- Remove hardcoded device references in IPs, MACs, etc.
 
 ## Refactor Firewall
 
-- Remove Tennessee and Primary Home references
-- Give example network device firewall rules instead of hard coding
-- Cameras and IoT devices on their networks should cloud connect but not wide open WAN access.
+- ✅ Remove Tennessee and Primary Home references
+- ✅ Remove specific hardcoded devices
+- ✅ Give example network device firewall rules instead of hard coding
+- ✅ Cameras and IoT devices on their networks should cloud connect but not wide open WAN access.
+- ✅ Homeassistant and iot hubs should see all IoT VLAN devices, but the devices shouldn't see each other, only their cloud access.
 
 ## Documentation
 
@@ -62,7 +65,9 @@
 - Automatically get latest Omada
 - Automatically get latest zeek, pangolin, headscale, etc.
 - Setup ansible for log/metric offloading/rotation/trim, system recovery, removing VM templates, etc.
+- Script to update/redeploy new VM versions
 - Verify backup configuration works with both NFS and CIFS
+- Add CEPH blob support?
 
 ## Multi-Site Improvements
 
@@ -72,3 +77,4 @@
 - Add support for different hardware configurations per site
 - Support different network topologies per site
 - Create global network sharing ansible for connecting networks by tailscale (terraform), headscale(terraform), and netbird(terraform) depending on site and a yet to be specified global network config.
+- Support self-hosted VPN - Specify DMZ, DMZ VM, cloud VM for headscale or self hosted netbird.

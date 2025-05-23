@@ -1,0 +1,18 @@
+# Ansible Managed: {{ ansible_managed }}
+[Unit]
+Description=Zeek Network Security Monitor for {{ site_config.name | default('default_site') }}
+After=network.target
+
+[Service]
+Type=forking
+User={{ site_config.zeek.service_user | default('root') }}
+Group={{ site_config.zeek.service_group | default('root') }}
+ExecStart={{ zeek_home }}/bin/zeekctl start
+ExecStop={{ zeek_home }}/bin/zeekctl stop
+ExecReload={{ zeek_home }}/bin/zeekctl restart # Or 'deploy' or 'check' then 'restart' as appropriate
+Restart=on-failure
+# Add environment variables if needed, e.g., for ZEEK_ETC, ZEEK_LOG_DIR for zeekctl
+# Environment="ZEEK_HOME={{ zeek_home }}"
+
+[Install]
+WantedBy=multi-user.target

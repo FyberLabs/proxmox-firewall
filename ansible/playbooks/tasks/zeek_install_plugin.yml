@@ -1,0 +1,44 @@
+---
+# tasks file for installing a Zeek plugin
+# This task is included in a loop from 07b_zeek_setup.yml
+# `zeek_plugin` variable is available from the loop, containing name, repo, type, etc.
+# `zeek_home` should also be available from the main playbook vars.
+
+- name: "Install Zeek plugin: {{ zeek_plugin.name }}"
+  block:
+    - name: "Clone plugin {{ zeek_plugin.name }} repository"
+      ansible.builtin.git:
+        repo: "{{ zeek_plugin.repo }}"
+        dest: "/tmp/zeek_plugin_{{ zeek_plugin.name }}"
+        version: "{{ zeek_plugin.version | default('master') }}"
+      when: "zeek_plugin.type == 'git_copy_files' or zeek_plugin.type == 'zkg_install_from_source'"
+
+    - name: "Copy files for plugin {{ zeek_plugin.name }} (git_copy_files type)"
+      ansible.builtin.copy:
+        src: "/tmp/zeek_plugin_{{ zeek_plugin.name }}/{{ item }}"
+        dest: "{{ zeek_home }}/share/zeek/{{ zeek_plugin.target_dir_suffix | default('site') }}/"
+        remote_src: true
+      loop: "{{ zeek_plugin.files_to_copy }}"
+      when: "zeek_plugin.type == 'git_copy_files' and zeek_plugin.files_to_copy is defined"
+      # Ensure the target directory exists if needed, or add a file task to create it.
+
+    - name: "Install plugin {{ zeek_plugin.name }} using zkg (zkg_install type)"
+      ansible.builtin.command:
+        cmd: "{{ zeek_home }}/bin/zkg install {{ zeek_plugin.zkg_package_name | default(zeek_plugin.name) }}"
+        # Example: zkg install zeek/corelight/community-id
+      args:
+        creates: "{{ zeek_home }}/lib/zeek/plugins/{{ zeek_plugin.zkg_creates_path | default(zeek_plugin.name) }}" # Heuristic for idempotency
+      when: "zeek_plugin.type == 'zkg_install'"
+
+    - name: "Build and install plugin {{ zeek_plugin.name }} from source (zkg_install_from_source type)"
+      ansible.builtin.shell: |
+        cd "/tmp/zeek_plugin_{{ zeek_plugin.name }}"
+        {{ zeek_home }}/bin/zkg install .
+      args:
+        creates: "{{ zeek_home }}/lib/zeek/plugins/{{ zeek_plugin.zkg_creates_path | default(zeek_plugin.name) }}" # Heuristic for idempotency
+      when: "zeek_plugin.type == 'zkg_install_from_source'"
+
+  rescue:
+    - name: "Failed to install Zeek plugin: {{ zeek_plugin.name }}"
+      ansible.builtin.debug:
+        msg: "Error during installation of Zeek plugin {{ zeek_plugin.name }}. Please check plugin type and parameters."

@@ -1,0 +1,39 @@
+---
+# Generate Terraform configuration from site config
+# This task will:
+# 1. Generate tfvars file from site config
+# 2. Setup tfstate backend
+# 3. Handle VM template deployment configuration
+
+- name: Create Terraform states directory for site
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../terraform/states/{{ site_config.name }}"
+    state: directory
+    mode: '0755'
+
+- name: Generate Terraform variables file from site config
+  ansible.builtin.template:
+    src: "templates/terraform.tfvars.j2"
+    dest: "{{ playbook_dir }}/../terraform/{{ site_config.name }}.tfvars"
+    mode: '0600'
+
+- name: Generate Terraform backend configuration
+  ansible.builtin.template:
+    src: "templates/terraform_backend.hcl.j2"
+    dest: "{{ playbook_dir }}/../terraform/states/{{ site_config.name }}/backend.hcl"
+    mode: '0600'
+
+- name: Initialize Terraform with backend config
+  ansible.builtin.command:
+    cmd: >
+      terraform init
+      -backend-config="{{ playbook_dir }}/../terraform/states/{{ site_config.name }}/backend.hcl"
+    chdir: "{{ playbook_dir }}/../terraform"
+  register: terraform_init
+  changed_when: terraform_init.stdout is search('Terraform has been successfully initialized')
+  failed_when: false  # We'll handle errors in the next task
+
+- name: Verify Terraform initialization
+  ansible.builtin.fail:
+    msg: "Terraform initialization failed. Check the output above for details."
+  when: terraform_init.rc != 0

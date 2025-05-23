@@ -4,7 +4,7 @@
   become: true
   vars:
     # Determine location-specific values
-    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    location_prefix: "{{ site_config.name | upper }}"
     initial_ip: "{{ lookup('env', location_prefix + '_PROXMOX_IP') }}"
     mgmt_ip: "{{ lookup('env', location_prefix + '_MGMT_IP') | default(network_prefix + '.50.10') }}"
     network_prefix: "{{ lookup('env', location_prefix + '_NETWORK_PREFIX') }}"
@@ -133,14 +133,14 @@
 
     - name: Configure DHCP server
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/templates/dhcpd.conf.j2"
+        src: "templates/dhcpd.conf.j2"
         dest: /etc/dhcp/dhcpd.conf
         mode: '0644'
       register: dhcp_config
 
     - name: Create subnet configuration for VLANs
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/templates/subnet.conf.j2"
+        src: "templates/subnet.conf.j2"
         dest: "/etc/dhcp/subnet-{{ item.id }}.conf"
         mode: '0644'
       with_items: "{{ vlans }}"
@@ -157,7 +157,7 @@
 
     - name: Configure DHCP interfaces
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/templates/dhcpd.default.j2"
+        src: "templates/dhcpd.default.j2"
         dest: /etc/default/isc-dhcp-server
         mode: '0644'
       vars:
@@ -167,7 +167,6 @@
           - "vmbr0.30"
           - "vmbr0.40"
           - "vmbr0.50"
-          - "vmbr2.20"
       register: dhcp_interfaces
 
     # Create directories for network and DHCP leases

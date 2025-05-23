@@ -15,7 +15,7 @@
     backup_retention: "{{ lookup('env', 'BACKUP_RETENTION') | default('3') }}"  # Number of backups to keep
     backup_compress: "{{ lookup('env', 'BACKUP_COMPRESS') | default('1') }}"  # 0=none, 1=fast, 2=best
     backup_mode: "{{ lookup('env', 'BACKUP_MODE') | default('snapshot') }}"  # snapshot or stop
-    location_prefix: "{{ 'TN' if 'tennessee' in group_names else 'PH' }}"
+    location_prefix: "{{ site_config.name | upper }}"
     backup_storage_id: "{{ location_prefix }}-nas-backup"
 
   tasks:

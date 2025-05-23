@@ -1,0 +1,4 @@
+# Terraform backend configuration for {{ site_config.display_name }}
+# This file is generated from site configuration
+
+path = "{{ playbook_dir }}/../terraform/states/{{ site_config.name }}/terraform.tfstate"

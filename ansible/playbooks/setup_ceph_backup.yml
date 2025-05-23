@@ -1,0 +1,100 @@
+---
+- name: Set up CEPH storage for backups
+  hosts: proxmox
+  become: true
+  vars:
+    ceph:
+      pool_name: "backups"
+      pg_num: 32
+      pgp_num: 32
+      size: 3
+      min_size: 2
+      crush_rule: "replicated_rule"
+      user: "backup"
+      caps:
+        - "mon 'allow r'"
+        - "osd 'allow rwx pool={{ ceph.pool_name }}'"
+
+  tasks:
+    - name: Install CEPH client packages
+      ansible.builtin.apt:
+        name:
+          - ceph-common
+          - python3-ceph
+        state: present
+        update_cache: true
+
+    - name: Create CEPH backup pool
+      ansible.builtin.command:
+        cmd: "ceph osd pool create {{ ceph.pool_name }} {{ ceph.pg_num }} {{ ceph.pgp_num }}"
+        creates: "/etc/ceph/{{ ceph.pool_name }}.conf"
+
+    - name: Set pool size
+      ansible.builtin.command:
+        cmd: "ceph osd pool set {{ ceph.pool_name }} size {{ ceph.size }}"
+      register: pool_size_result
+      changed_when: pool_size_result.rc == 0
+
+    - name: Set pool min size
+      ansible.builtin.command:
+        cmd: "ceph osd pool set {{ ceph.pool_name }} min_size {{ ceph.min_size }}"
+      register: pool_min_size_result
+      changed_when: pool_min_size_result.rc == 0
+
+    - name: Create CEPH backup user
+      ansible.builtin.command:
+        cmd: "ceph auth add client.{{ ceph.user }} {{ ceph.caps | join(' ') }}"
+      register: user_create_result
+      changed_when: user_create_result.rc == 0
+
+    - name: Get CEPH user key
+      ansible.builtin.command:
+        cmd: "ceph auth get-key client.{{ ceph.user }}"
+      register: ceph_key
+      changed_when: false
+
+    - name: Create CEPH configuration directory
+      ansible.builtin.file:
+        path: /etc/ceph
+        state: directory
+        mode: '0755'
+
+    - name: Deploy CEPH configuration
+      ansible.builtin.template:
+        src: templates/ceph.conf.j2
+        dest: /etc/ceph/ceph.conf
+        mode: '0644'
+
+    - name: Deploy CEPH keyring
+      ansible.builtin.template:
+        src: templates/ceph.client.{{ ceph.user }}.keyring.j2
+        dest: /etc/ceph/ceph.client.{{ ceph.user }}.keyring
+        mode: '0600'
+        vars:
+          key: "{{ ceph_key.stdout }}"
+
+    - name: Create backup mount point
+      ansible.builtin.file:
+        path: /mnt/ceph/backups
+        state: directory
+        mode: '0755'
+
+    - name: Add CEPH mount to fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "{{ ceph.user }}@{{ ceph.pool_name }} /mnt/ceph/backups ceph _netdev,name={{ ceph.user }},secretfile=/etc/ceph/ceph.client.{{ ceph.user }}.secret 0 0"
+        state: present
+
+    - name: Create CEPH secret file
+      ansible.builtin.copy:
+        content: "{{ ceph_key.stdout }}"
+        dest: /etc/ceph/ceph.client.{{ ceph.user }}.secret
+        mode: '0600'
+
+    - name: Mount CEPH filesystem
+      ansible.posix.mount:
+        path: /mnt/ceph/backups
+        state: mounted
+        fstype: ceph
+        src: "{{ ceph.user }}@{{ ceph.pool_name }}"
+        opts: "_netdev,name={{ ceph.user }},secretfile=/etc/ceph/ceph.client.{{ ceph.user }}.secret"

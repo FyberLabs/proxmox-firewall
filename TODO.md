@@ -56,21 +56,21 @@
 - ✅ Add support for netbird as an alternative to tailscale
 - ✅ Support headscale self hosting not just tailscale control plane
 - Also VM for pangolin and crowdsec for SSO WAN access
-- Validate image downloads cert/signature
+- ✅ Validate image downloads cert/signature
 - Does crowdsec docker actually work OK in proxmox?
 - (https://www.reddit.com/r/selfhosted/comments/1jp5l21/security_measures_when_using_pangolin/)
 
 ## Automation
 
-- Make a requirements script for python and a prereq script that runs it and installs ubuntu packages needed
-- Make a script to find latest sources and hashes and populate a versions file that is sourced by ansible for templates, etc.
+- ✅ Make a requirements script for python and a prereq script that runs it and installs ubuntu packages needed
+- ✅ Make a script to find latest sources and hashes and populate a versions file that is sourced by ansible for templates, etc.
 - ✅ Automatically get latest Ubuntu base for VMs
-- Automatically get latest Omada
-- Automatically get latest zeek, pangolin, headscale, etc.
+- ✅ Automatically get latest Omada
+- ✅ Automatically get latest zeek, pangolin, headscale, etc.
 - Setup ansible for log/metric offloading/rotation/trim, system recovery, removing VM templates, etc.
 - Script to update/redeploy/reconfigure new VM versions
-- Verify backup configuration works with both NFS and CIFS
-- Add CEPH blob backup support?
+- ✅ Verify backup configuration works with both NFS and CIFS
+- ✅ Add CEPH blob backup support?
 
 ## Multi-Site Improvements
 

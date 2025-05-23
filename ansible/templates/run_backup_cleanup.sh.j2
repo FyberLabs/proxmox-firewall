@@ -1,0 +1,13 @@
+#!/bin/bash
+# Ansible managed: {{ ansible_managed }}
+
+# Set environment
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export ANSIBLE_CONFIG="{{ ansible_config_path | default('/etc/ansible/ansible.cfg') }}"
+
+# Run the backup cleanup playbook
+cd {{ playbook_path | default('/etc/ansible') }}
+ansible-playbook cleanup_old_backups.yml -e "dry_run=false" >> /var/log/backup_cleanup.log 2>&1
+
+# Clean up old log files (keep last 30 days)
+find /var/log/backup_cleanup_*.log -mtime +30 -delete

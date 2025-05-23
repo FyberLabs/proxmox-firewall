@@ -1,0 +1,61 @@
+# Backup Cleanup Report
+# Generated: {{ cleanup_time }}
+# Mode: {{ "Dry Run" if dry_run else "Actual Deletion" }}
+
+## Retention Periods
+- Daily backups: {{ retention.daily }} days
+- Weekly backups: {{ retention.weekly }} days
+- Monthly backups: {{ retention.monthly }} days
+- Yearly backups: {{ retention.yearly }} days
+
+## Files to be Cleaned Up
+
+### Daily Backups (older than {{ retention.daily }} days)
+{% if daily_backups %}
+{% for backup in daily_backups %}
+- {{ backup.path }} ({{ backup.size | filesizeformat }}, modified: {{ backup.mtime | strftime('%Y-%m-%d %H:%M:%S') }})
+{% endfor %}
+{% else %}
+No daily backups to clean up.
+{% endif %}
+
+### Weekly Backups (older than {{ retention.weekly }} days)
+{% if weekly_backups %}
+{% for backup in weekly_backups %}
+- {{ backup.path }} ({{ backup.size | filesizeformat }}, modified: {{ backup.mtime | strftime('%Y-%m-%d %H:%M:%S') }})
+{% endfor %}
+{% else %}
+No weekly backups to clean up.
+{% endif %}
+
+### Monthly Backups (older than {{ retention.monthly }} days)
+{% if monthly_backups %}
+{% for backup in monthly_backups %}
+- {{ backup.path }} ({{ backup.size | filesizeformat }}, modified: {{ backup.mtime | strftime('%Y-%m-%d %H:%M:%S') }})
+{% endfor %}
+{% else %}
+No monthly backups to clean up.
+{% endif %}
+
+### Yearly Backups (older than {{ retention.yearly }} days)
+{% if yearly_backups %}
+{% for backup in yearly_backups %}
+- {{ backup.path }} ({{ backup.size | filesizeformat }}, modified: {{ backup.mtime | strftime('%Y-%m-%d %H:%M:%S') }})
+{% endfor %}
+{% else %}
+No yearly backups to clean up.
+{% endif %}
+
+## Summary
+Total files to be cleaned up: {{ (daily_backups + weekly_backups + monthly_backups + yearly_backups) | length }}
+Total space to be freed: {{ (daily_backups + weekly_backups + monthly_backups + yearly_backups) | sum(attribute='size') | filesizeformat }}
+
+## Next Steps
+{% if dry_run %}
+1. Review the files listed above
+2. Run the playbook with `dry_run: false` to perform the actual cleanup
+{% else %}
+1. Verify that the cleanup was successful
+2. Check available storage space
+3. Update backup retention policies if needed
+{% endif %}

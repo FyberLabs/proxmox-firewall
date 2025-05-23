@@ -1,0 +1,32 @@
+---
+- name: Set up backup cleanup automation
+  hosts: proxmox
+  become: true
+  vars:
+    ansible_config_path: "{{ site_config.ansible.config_path | default('/etc/ansible/ansible.cfg') }}"
+    playbook_path: "{{ site_config.ansible.playbook_path | default('/etc/ansible') }}"
+
+  tasks:
+    - name: Deploy backup cleanup wrapper script
+      ansible.builtin.template:
+        src: templates/run_backup_cleanup.sh.j2
+        dest: /usr/local/bin/run_backup_cleanup.sh
+        mode: '0755'
+
+    - name: Deploy backup cleanup cron job
+      ansible.builtin.template:
+        src: templates/backup_cleanup_cron.j2
+        dest: /etc/cron.d/backup_cleanup
+        mode: '0644'
+
+    - name: Ensure log directory exists
+      ansible.builtin.file:
+        path: /var/log
+        state: directory
+        mode: '0755'
+
+    - name: Create initial log file
+      ansible.builtin.file:
+        path: /var/log/backup_cleanup.log
+        state: touch
+        mode: '0644'

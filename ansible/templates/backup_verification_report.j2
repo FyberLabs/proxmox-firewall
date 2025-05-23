@@ -1,0 +1,67 @@
+# Backup Verification Report
+Generated: {{ ansible_date_time.iso8601 }}
+
+## Storage Status
+
+### NFS Storage
+{% if '/mnt/nfs/backups' in site_config.backup.storage_paths %}
+- Mount Status: {{ "Mounted" if nfs_status else "Not Mounted" }}
+- Access Status: {{ "Working" if nfs_access else "Not Working" }}
+{% else %}
+- Status: Not Configured
+{% endif %}
+
+### CIFS Storage
+{% if '/mnt/cifs/backups' in site_config.backup.storage_paths %}
+- Mount Status: {{ "Mounted" if cifs_status else "Not Mounted" }}
+- Access Status: {{ "Working" if cifs_access else "Not Working" }}
+{% else %}
+- Status: Not Configured
+{% endif %}
+
+### CEPH Storage
+{% if '/mnt/ceph/backups' in site_config.backup.storage_paths %}
+- Mount Status: {{ "Mounted" if ceph_status else "Not Mounted" }}
+- Access Status: {{ "Working" if ceph_access else "Not Working" }}
+{% else %}
+- Status: Not Configured
+{% endif %}
+
+## Proxmox Backup Configuration
+{% if backup_storage_status %}
+### Configured Storage
+{% for line in backup_storage_status %}
+{{ line }}
+{% endfor %}
+{% else %}
+No backup storage configured in Proxmox
+{% endif %}
+
+## Old Backups Found
+{% if old_backups_list %}
+The following backups are older than {{ retention_days }} days:
+{% for backup in old_backups_list %}
+- {{ backup.path }} (Last modified: {{ backup.mtime }})
+{% endfor %}
+{% else %}
+No old backups found
+{% endif %}
+
+## Recommendations
+{% if not (nfs_status or cifs_status or ceph_status) %}
+- No backup storage is currently mounted. Please check your storage configuration.
+{% endif %}
+
+{% if old_backups_list %}
+- Consider cleaning up old backups to free up storage space
+{% endif %}
+
+{% if not backup_storage_status %}
+- No backup storage is configured in Proxmox. Please add storage in the Proxmox web interface.
+{% endif %}
+
+## Next Steps
+1. Verify that all required backup storage is mounted and accessible
+2. Check Proxmox backup jobs are configured correctly
+3. Review and clean up old backups if necessary
+4. Monitor backup storage space usage

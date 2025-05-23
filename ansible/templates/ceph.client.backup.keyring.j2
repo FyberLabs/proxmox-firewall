@@ -1,0 +1,4 @@
+[client.{{ ceph.user }}]
+    key = {{ key }}
+    caps mon = "allow r"
+    caps osd = "allow rwx pool={{ ceph.pool_name }}"

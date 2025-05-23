@@ -1,0 +1,130 @@
+---
+- name: Clean up old backups
+  hosts: proxmox
+  become: true
+  vars:
+    # Default retention periods (in days)
+    default_retention:
+      daily: 7
+      weekly: 30
+      monthly: 90
+      yearly: 365
+    # Dry run by default - set to false to actually delete
+    dry_run: true
+    # Backup file patterns to look for
+    backup_patterns:
+      - "*.vma*"  # Proxmox VM archives
+      - "*.log"   # Log files
+      - "*.conf"  # Configuration backups
+      - "*.xml"   # XML dumps
+
+  tasks:
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ inventory_hostname.split('-')[0] }}.yml"
+
+    - name: Set retention periods from site config
+      ansible.builtin.set_fact:
+        retention: "{{ site_config.backup.retention | default(default_retention) }}"
+
+    - name: Find old daily backups
+      ansible.builtin.find:
+        paths: "{{ item }}"
+        patterns: "{{ backup_patterns }}"
+        age: "{{ retention.daily }}d"
+        recurse: true
+      loop: "{{ site_config.backup.storage_paths | default([]) }}"
+      register: old_daily_backups
+      when: site_config.backup.storage_paths is defined
+
+    - name: Find old weekly backups
+      ansible.builtin.find:
+        paths: "{{ item }}"
+        patterns: "{{ backup_patterns }}"
+        age: "{{ retention.weekly }}d"
+        recurse: true
+      loop: "{{ site_config.backup.storage_paths | default([]) }}"
+      register: old_weekly_backups
+      when: site_config.backup.storage_paths is defined
+
+    - name: Find old monthly backups
+      ansible.builtin.find:
+        paths: "{{ item }}"
+        patterns: "{{ backup_patterns }}"
+        age: "{{ retention.monthly }}d"
+        recurse: true
+      loop: "{{ site_config.backup.storage_paths | default([]) }}"
+      register: old_monthly_backups
+      when: site_config.backup.storage_paths is defined
+
+    - name: Find old yearly backups
+      ansible.builtin.find:
+        paths: "{{ item }}"
+        patterns: "{{ backup_patterns }}"
+        age: "{{ retention.yearly }}d"
+        recurse: true
+      loop: "{{ site_config.backup.storage_paths | default([]) }}"
+      register: old_yearly_backups
+      when: site_config.backup.storage_paths is defined
+
+    - name: Generate cleanup report
+      ansible.builtin.template:
+        src: templates/backup_cleanup_report.j2
+        dest: "/var/log/backup_cleanup_$(date +%Y%m%d_%H%M%S).log"
+        mode: '0644'
+      vars:
+        cleanup_time: "{{ ansible_date_time.iso8601 }}"
+        daily_backups: "{{ old_daily_backups.files | default([]) }}"
+        weekly_backups: "{{ old_weekly_backups.files | default([]) }}"
+        monthly_backups: "{{ old_monthly_backups.files | default([]) }}"
+        yearly_backups: "{{ old_yearly_backups.files | default([]) }}"
+
+    - name: Delete old daily backups
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_daily_backups.files | default([]) }}"
+      when:
+        - not dry_run
+        - old_daily_backups.files is defined
+        - old_daily_backups.files | length > 0
+
+    - name: Delete old weekly backups
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_weekly_backups.files | default([]) }}"
+      when:
+        - not dry_run
+        - old_weekly_backups.files is defined
+        - old_weekly_backups.files | length > 0
+
+    - name: Delete old monthly backups
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_monthly_backups.files | default([]) }}"
+      when:
+        - not dry_run
+        - old_monthly_backups.files is defined
+        - old_monthly_backups.files | length > 0
+
+    - name: Delete old yearly backups
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_yearly_backups.files | default([]) }}"
+      when:
+        - not dry_run
+        - old_yearly_backups.files is defined
+        - old_yearly_backups.files | length > 0
+
+    - name: Show cleanup summary
+      ansible.builtin.debug:
+        msg: |
+          Backup Cleanup Summary:
+          - Daily backups (older than {{ retention.daily }} days): {{ old_daily_backups.files | default([]) | length }} files
+          - Weekly backups (older than {{ retention.weekly }} days): {{ old_weekly_backups.files | default([]) | length }} files
+          - Monthly backups (older than {{ retention.monthly }} days): {{ old_monthly_backups.files | default([]) | length }} files
+          - Yearly backups (older than {{ retention.yearly }} days): {{ old_yearly_backups.files | default([]) | length }} files
+          Mode: {{ "Dry Run" if dry_run else "Actual Deletion" }}

@@ -804,3 +804,108 @@ PRIMARY_NVR_MAC="aa:bb:cc:dd:ee:ff"
 ```
 
 You can use the `scripts/add_device.sh` script to automatically add these entries.
+
+## Backup Configuration
+
+### Backup Storage
+Configure backup storage in your site configuration file (`group_vars/<site_name>.yml`):
+
+```yaml
+backup:
+  # Retention periods in days
+  retention:
+    daily: 7    # Keep daily backups for 7 days
+    weekly: 30  # Keep weekly backups for 30 days
+    monthly: 90 # Keep monthly backups for 90 days
+    yearly: 365 # Keep yearly backups for 365 days
+  
+  # Backup storage paths
+  storage_paths:
+    - /mnt/nfs/backups    # NFS backup location
+    - /mnt/cifs/backups   # CIFS backup location
+    - /mnt/ceph/backups   # CEPH backup location
+    # Add more paths as needed
+
+  # CEPH configuration
+  ceph:
+    pool_name: "backups"
+    pg_num: 32
+    pgp_num: 32
+    size: 3
+    min_size: 2
+    crush_rule: "replicated_rule"
+    user: "backup"
+    caps:
+      - "mon 'allow r'"
+      - "osd 'allow rwx pool={{ ceph.pool_name }}'"
+
+  # Ansible configuration
+  ansible:
+    config_path: /etc/ansible/ansible.cfg
+    playbook_path: /etc/ansible
+```
+
+### Setting up CEPH Storage
+To set up CEPH storage for backups:
+
+```bash
+# Deploy CEPH storage
+ansible-playbook setup_ceph_backup.yml
+
+# Verify CEPH configuration
+ceph status
+ceph osd pool ls
+```
+
+### Backup Verification
+To verify your backup configuration:
+
+```bash
+# Run backup verification
+ansible-playbook verify_backups.yml
+
+# Check the verification report
+cat /var/log/backup_verification_*.log
+```
+
+### Backup Cleanup
+To manage old backups:
+
+```bash
+# Dry run (shows what would be deleted)
+ansible-playbook cleanup_old_backups.yml
+
+# Perform actual cleanup
+ansible-playbook cleanup_old_backups.yml -e "dry_run=false"
+
+# Check the cleanup report
+cat /var/log/backup_cleanup_*.log
+```
+
+### Automated Backup Cleanup
+To set up automated backup cleanup:
+
+```bash
+# Deploy the cleanup automation
+ansible-playbook setup_backup_cleanup.yml
+```
+
+This will:
+1. Create a cron job that runs every Sunday at 2 AM
+2. Deploy a wrapper script that runs the cleanup playbook
+3. Set up log rotation for cleanup reports
+
+The cleanup job will:
+- Remove backups older than their retention period
+- Generate detailed reports of all actions
+- Clean up old log files automatically
+- Log all activities to `/var/log/backup_cleanup.log`
+
+To monitor the automated cleanup:
+```bash
+# View the latest cleanup log
+tail -f /var/log/backup_cleanup.log
+
+# View the latest cleanup report
+ls -t /var/log/backup_cleanup_*.log | head -n1 | xargs cat
+```

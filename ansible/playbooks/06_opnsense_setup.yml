@@ -158,19 +158,8 @@
             default: "1"
         status_code: [200, 201, 202]
       register: gateway_group_result
-      when: opnsense_api_key and opnsense_api_secret # Only run if creds are set
-
-    - name: Apply gateway changes
-      ansible.builtin.uri:
-        url: "https://{{ opn_api_host | default(inventory_hostname) }}/api/routes/gateway/reconfigure"
-        method: POST
-        user: "{{ opnsense_api_key }}"
-        password: "{{ opnsense_api_secret }}"
-        force_basic_auth: true
-        validate_certs: "{{ opn_ssl_verify }}"
-        status_code: [200, 201, 202]
-      register: apply_gw
-      when: gateway_group_result.changed # Only if gateway was configured
+      notify: Reconfigure_gateway
+      when: opnsense_api_key and opnsense_api_secret
 
     # - name: Install and configure Tailscale package # This was duplicated from original, assuming it's handled elsewhere or by opnsense_services
     #   ansibleguy.opnsense.package:
@@ -188,3 +177,14 @@
 
 # Removed redundant/old include_vars and set_fact that were at the end of the original file.
 # The logic for loading site_config and setting related facts is now at the beginning (pre_tasks).
+
+  handlers:
+    - name: Reconfigure_gateway
+      ansible.builtin.uri:
+        url: "https://{{ opn_api_host | default(inventory_hostname) }}/api/routes/gateway/reconfigure"
+        method: POST
+        user: "{{ opnsense_api_key }}"
+        password: "{{ opnsense_api_secret }}"
+        force_basic_auth: true
+        validate_certs: "{{ opn_ssl_verify }}"
+        status_code: [200, 201, 202]

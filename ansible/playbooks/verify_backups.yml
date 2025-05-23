@@ -1,0 +1,248 @@
+---
+- name: Verify Backup Configurations
+  hosts: proxmox
+  become: true
+  vars:
+    backup_test_file: "backup_test_$(date +%Y%m%d_%H%M%S).txt"
+    backup_test_content: "Test backup content created at $(date)"
+    backup_retention_days: 7
+
+  tasks:
+    - name: Include site-specific variables
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ inventory_hostname.split('-')[0] }}.yml"
+
+    - name: Verify NFS Backup Configuration
+      when:
+        - site_config.backup is defined
+        - site_config.backup.storage_paths is defined
+        - "'/mnt/nfs/backups' in site_config.backup.storage_paths"
+      block:
+        - name: Check NFS mount points
+          ansible.builtin.shell: |
+            set -o pipefail
+            mount | grep -E 'nfs|nfs4' | grep -v '^#' | awk '{print $3}'
+          register: nfs_mounts
+          changed_when: false
+
+        - name: Verify NFS mount permissions
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0755'
+          loop: "{{ nfs_mounts.stdout_lines }}"
+          when: nfs_mounts.stdout_lines | length > 0
+
+        - name: Test NFS write access
+          ansible.builtin.copy:
+            content: "{{ backup_test_content }}"
+            dest: "{{ item }}/{{ backup_test_file }}"
+            mode: '0644'
+          loop: "{{ nfs_mounts.stdout_lines }}"
+          when: nfs_mounts.stdout_lines | length > 0
+
+        - name: Test NFS read access
+          ansible.builtin.shell: |
+            set -o pipefail
+            cat "{{ item }}/{{ backup_test_file }}"
+          loop: "{{ nfs_mounts.stdout_lines }}"
+          register: nfs_read_test
+          changed_when: false
+          when: nfs_mounts.stdout_lines | length > 0
+
+        - name: Verify NFS backup content
+          ansible.builtin.assert:
+            that: backup_test_content in item.stdout
+            fail_msg: "NFS backup test failed - content mismatch"
+          loop: "{{ nfs_read_test.results }}"
+          when: nfs_mounts.stdout_lines | length > 0
+
+        - name: Clean up NFS test files
+          ansible.builtin.file:
+            path: "{{ item }}/{{ backup_test_file }}"
+            state: absent
+          loop: "{{ nfs_mounts.stdout_lines }}"
+          when: nfs_mounts.stdout_lines | length > 0
+
+    - name: Verify CIFS Backup Configuration
+      when:
+        - site_config.backup is defined
+        - site_config.backup.storage_paths is defined
+        - "'/mnt/cifs/backups' in site_config.backup.storage_paths"
+      block:
+        - name: Check CIFS mount points
+          ansible.builtin.shell: |
+            set -o pipefail
+            mount | grep -E 'cifs|smb' | grep -v '^#' | awk '{print $3}'
+          register: cifs_mounts
+          changed_when: false
+
+        - name: Verify CIFS mount permissions
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0755'
+          loop: "{{ cifs_mounts.stdout_lines }}"
+          when: cifs_mounts.stdout_lines | length > 0
+
+        - name: Test CIFS write access
+          ansible.builtin.copy:
+            content: "{{ backup_test_content }}"
+            dest: "{{ item }}/{{ backup_test_file }}"
+            mode: '0644'
+          loop: "{{ cifs_mounts.stdout_lines }}"
+          when: cifs_mounts.stdout_lines | length > 0
+
+        - name: Test CIFS read access
+          ansible.builtin.shell: |
+            set -o pipefail
+            cat "{{ item }}/{{ backup_test_file }}"
+          loop: "{{ cifs_mounts.stdout_lines }}"
+          register: cifs_read_test
+          changed_when: false
+          when: cifs_mounts.stdout_lines | length > 0
+
+        - name: Verify CIFS backup content
+          ansible.builtin.assert:
+            that: backup_test_content in item.stdout
+            fail_msg: "CIFS backup test failed - content mismatch"
+          loop: "{{ cifs_read_test.results }}"
+          when: cifs_mounts.stdout_lines | length > 0
+
+        - name: Clean up CIFS test files
+          ansible.builtin.file:
+            path: "{{ item }}/{{ backup_test_file }}"
+            state: absent
+          loop: "{{ cifs_mounts.stdout_lines }}"
+          when: cifs_mounts.stdout_lines | length > 0
+
+    - name: Verify CEPH Backup Configuration
+      when:
+        - site_config.backup is defined
+        - site_config.backup.storage_paths is defined
+        - "'/mnt/ceph/backups' in site_config.backup.storage_paths"
+      block:
+        - name: Check CEPH mount points
+          ansible.builtin.shell: |
+            set -o pipefail
+            mount | grep -E 'ceph' | grep -v '^#' | awk '{print $3}'
+          register: ceph_mounts
+          changed_when: false
+
+        - name: Verify CEPH mount permissions
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0755'
+          loop: "{{ ceph_mounts.stdout_lines }}"
+          when: ceph_mounts.stdout_lines | length > 0
+
+        - name: Test CEPH write access
+          ansible.builtin.copy:
+            content: "{{ backup_test_content }}"
+            dest: "{{ item }}/{{ backup_test_file }}"
+            mode: '0644'
+          loop: "{{ ceph_mounts.stdout_lines }}"
+          when: ceph_mounts.stdout_lines | length > 0
+
+        - name: Test CEPH read access
+          ansible.builtin.shell: |
+            set -o pipefail
+            cat "{{ item }}/{{ backup_test_file }}"
+          loop: "{{ ceph_mounts.stdout_lines }}"
+          register: ceph_read_test
+          changed_when: false
+          when: ceph_mounts.stdout_lines | length > 0
+
+        - name: Verify CEPH backup content
+          ansible.builtin.assert:
+            that: backup_test_content in item.stdout
+            fail_msg: "CEPH backup test failed - content mismatch"
+          loop: "{{ ceph_read_test.results }}"
+          when: ceph_mounts.stdout_lines | length > 0
+
+        - name: Clean up CEPH test files
+          ansible.builtin.file:
+            path: "{{ item }}/{{ backup_test_file }}"
+            state: absent
+          loop: "{{ ceph_mounts.stdout_lines }}"
+          when: ceph_mounts.stdout_lines | length > 0
+
+    - name: Verify Backup Retention
+      block:
+        - name: Check backup retention for NFS
+          ansible.builtin.shell: |
+            set -o pipefail
+            find {{ item }} -type f -mtime +{{ backup_retention_days }} -name "*.vma*" -o -name "*.log"
+          loop: "{{ nfs_mounts.stdout_lines }}"
+          register: old_nfs_backups
+          changed_when: false
+          when: nfs_mounts.stdout_lines | length > 0
+
+        - name: Check backup retention for CIFS
+          ansible.builtin.shell: |
+            set -o pipefail
+            find {{ item }} -type f -mtime +{{ backup_retention_days }} -name "*.vma*" -o -name "*.log"
+          loop: "{{ cifs_mounts.stdout_lines }}"
+          register: old_cifs_backups
+          changed_when: false
+          when: cifs_mounts.stdout_lines | length > 0
+
+        - name: Check backup retention for CEPH
+          ansible.builtin.shell: |
+            set -o pipefail
+            find {{ item }} -type f -mtime +{{ backup_retention_days }} -name "*.vma*" -o -name "*.log"
+          loop: "{{ ceph_mounts.stdout_lines }}"
+          register: old_ceph_backups
+          changed_when: false
+          when: ceph_mounts.stdout_lines | length > 0
+
+        - name: Report old backups
+          ansible.builtin.debug:
+            msg: |
+              Found old backups:
+              NFS: {{ old_nfs_backups.stdout_lines | default([]) | join('\n') }}
+              CIFS: {{ old_cifs_backups.stdout_lines | default([]) | join('\n') }}
+              CEPH: {{ old_ceph_backups.stdout_lines | default([]) | join('\n') }}
+
+    - name: Verify Proxmox Backup Configuration
+      block:
+        - name: Check Proxmox backup settings
+          ansible.builtin.shell: |
+            set -o pipefail
+            pvesm status | grep -E 'nfs|cifs|ceph'
+          register: pve_backup_status
+          changed_when: false
+
+        - name: Verify backup storage is enabled
+          ansible.builtin.assert:
+            that: pve_backup_status.stdout_lines | length > 0
+            fail_msg: "No backup storage configured in Proxmox"
+
+        - name: Check backup jobs
+          ansible.builtin.shell: |
+            set -o pipefail
+            pvesm list | grep -E 'nfs|cifs|ceph'
+          register: pve_backup_jobs
+          changed_when: false
+
+        - name: Verify backup jobs exist
+          ansible.builtin.assert:
+            that: pve_backup_jobs.stdout_lines | length > 0
+            fail_msg: "No backup jobs configured in Proxmox"
+
+    - name: Generate Backup Verification Report
+      ansible.builtin.template:
+        src: templates/backup_verification_report.j2
+        dest: "/var/log/backup_verification_$(date +%Y%m%d_%H%M%S).log"
+        mode: '0644'
+      vars:
+        verification_time: "{{ ansible_date_time.iso8601 }}"
+        nfs_status: "{{ nfs_mounts.stdout_lines | default([]) | length > 0 }}"
+        cifs_status: "{{ cifs_mounts.stdout_lines | default([]) | length > 0 }}"
+        ceph_status: "{{ ceph_mounts.stdout_lines | default([]) | length > 0 }}"
+        nfs_access: "{{ nfs_read_test.results | default([]) | map(attribute='stdout') | list | join('') | regex_search(backup_test_content) | default(false) }}"
+        cifs_access: "{{ cifs_read_test.results | default([]) | map(attribute='stdout') | list | join('') | regex_search(backup_test_content) | default(false) }}"
+        ceph_access: "{{ ceph_read_test.results | default([]) | map(attribute='stdout') | list | join('') | regex_search(backup_test_content) | default(false) }}"
+        backup_storage_status: "{{ pve_backup_status.stdout_lines | default([]) }}"
+        old_backups_list: "{{ (old_nfs_backups.stdout_lines + old_cifs_backups.stdout_lines + old_ceph_backups.stdout_lines) | default([]) }}"

@@ -4,31 +4,15 @@ set -e
 # Load .env for secrets
 source .env
 
-# Install required tools (if not already present)
-# Add the Proxmox VE repository as root:
-echo "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-subscription" | sudo tee /etc/apt/sources.list.d/pve-install-repo.list
-
-# Import the Proxmox VE signing key:
-sudo wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
-
-sudo apt update
-sudo apt install -y whois proxmox-auto-install-assistant xorriso curl pipx
-
-#Local install of ansible and ansible-dev-tools
-pipx ensurepath
-pipx install --include-deps ansible
-pipx install ansible-dev-tools ansible-lint httpx
-ansible-galaxy collection install -r ansible/collections/requirements.yml
-
 # Get validated Proxmox ISO information
 if [ ! -f "ansible/group_vars/validated_images.json" ]; then
-    echo "Error: Validated images JSON file not found. Please run validate_images.sh first."
+    echo "Error: Validated images JSON file not found. Please run download_latest_images.sh first."
     exit 1
 fi
 
 PROXMOX_ISO_PATH=$(jq -r '.proxmox_iso_path' "ansible/group_vars/validated_images.json")
 if [ "$PROXMOX_ISO_PATH" = "null" ] || [ ! -f "$PROXMOX_ISO_PATH" ]; then
-    echo "Error: Validated Proxmox ISO not found. Please run validate_images.sh first."
+    echo "Error: Validated Proxmox ISO not found. Please run download_latest_images.sh first."
     exit 1
 fi
 

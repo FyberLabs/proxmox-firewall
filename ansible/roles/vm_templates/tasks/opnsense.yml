@@ -11,7 +11,7 @@
 
 - name: Fail if OPNsense image not found
   ansible.builtin.fail:
-    msg: "OPNsense image not found at {{ validated_images.opnsense_image_path }}. Please run validate_images.sh first."
+    msg: "OPNsense image not found at {{ validated_images.opnsense_image_path }}. Please run download_latest_images.sh first."
   when: not opnsense_image.stat.exists
 
 - name: Create OPNsense VM template

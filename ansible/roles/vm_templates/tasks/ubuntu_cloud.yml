@@ -11,7 +11,7 @@
 
 - name: Fail if Ubuntu image not found
   ansible.builtin.fail:
-    msg: "Ubuntu cloud image not found at {{ validated_images.ubuntu_image_path }}. Please run validate_images.sh first."
+    msg: "Ubuntu cloud image not found at {{ validated_images.ubuntu_image_path }}. Please run download_latest_images.sh first."
   when: not cloud_image.stat.exists
 
 - name: Install required tools

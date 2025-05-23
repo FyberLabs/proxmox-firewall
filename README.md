@@ -17,7 +17,7 @@
 
 ### Detailed Installation Process
 
-0. **Environment Variables**
+0. **Environment Variables**:
 
   ```bash
   cp env.example .env

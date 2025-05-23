@@ -2,7 +2,7 @@
 # Global variables for all playbooks
 # This file contains default configurations and templates
 # Site-specific configurations are stored in separate files in this directory
-# (e.g., site1.yml, site2.yml) and are created by create_site_config.sh
+# (e.g., site1.yml, site2.yml) and are created by scripts/create_site_config.sh
 
 # Site configuration template
 # Each site should have its own file (e.g., site1.yml) with this structure:

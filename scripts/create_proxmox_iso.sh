@@ -20,18 +20,26 @@ pipx install --include-deps ansible
 pipx install ansible-dev-tools ansible-lint httpx
 ansible-galaxy collection install -r ansible/collections/requirements.yml
 
-# Find latest Proxmox ISO
+# Get validated Proxmox ISO information
+if [ ! -f "ansible/group_vars/validated_images.json" ]; then
+    echo "Error: Validated images JSON file not found. Please run validate_images.sh first."
+    exit 1
+fi
+
+PROXMOX_ISO_PATH=$(jq -r '.proxmox_iso_path' "ansible/group_vars/validated_images.json")
+if [ "$PROXMOX_ISO_PATH" = "null" ] || [ ! -f "$PROXMOX_ISO_PATH" ]; then
+    echo "Error: Validated Proxmox ISO not found. Please run validate_images.sh first."
+    exit 1
+fi
+
+echo "Using validated Proxmox ISO: $PROXMOX_ISO_PATH"
+
 ISO_NAME="proxmox-ve-custom.iso"
 TMP_DIR="/tmp/proxmox-iso"
 mkdir -p "$TMP_DIR"
 
-echo "Finding latest Proxmox VE ISO..."
-LATEST_ISO=$(curl -s https://download.proxmox.com/iso/ | grep -o 'proxmox-ve_[0-9]\+\.[0-9]\+-[0-9]\+\.iso' | sort -V | tail -n 1)
-ISO_URL="https://download.proxmox.com/iso/$LATEST_ISO"
-echo "Found latest version: $LATEST_ISO"
-
-# Download Proxmox ISO (if not already present)
-wget -nc "$ISO_URL" --no-check-certificate -O "$TMP_DIR/proxmox-original.iso"
+# Copy validated ISO to temp directory
+cp "$PROXMOX_ISO_PATH" "$TMP_DIR/proxmox-original.iso"
 
 ROOT_HASHED_PASSWORD=$(mkpasswd $ROOT_PASSWORD)
 

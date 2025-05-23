@@ -1,0 +1,25 @@
+---
+# Tasks for Terraform role
+
+- name: Include validated images information
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/validated_images.json"
+    name: validated_images
+
+- name: Create Terraform variables file
+  ansible.builtin.template:
+    src: terraform.tfvars.j2
+    dest: "{{ terraform_dir }}/terraform.tfvars"
+  when: terraform_state == 'present'
+
+- name: Initialize Terraform
+  community.general.terraform:
+    project_path: "{{ terraform_dir }}"
+    force_init: true
+  when: terraform_state == 'present'
+
+- name: Apply Terraform configuration
+  community.general.terraform:
+    project_path: "{{ terraform_dir }}"
+    state: "{{ terraform_state }}"
+  when: terraform_state == 'present'

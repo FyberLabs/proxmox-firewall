@@ -67,7 +67,7 @@ list_sites() {
     echo -e "\n${GREEN}Available sites:${NC}"
     if [ -z "$(ls -A ${CONFIG_DIR}/*.conf 2>/dev/null)" ]; then
         echo -e "${RED}No sites configured yet.${NC}"
-        echo -e "${YELLOW}Please run create_site_config.sh first to create a site.${NC}"
+        echo -e "${YELLOW}Please run scripts/create_site_config.sh first to create a site.${NC}"
         exit 1
     else
         echo -e "${BLUE}Site Name\tDisplay Name${NC}"
@@ -172,7 +172,7 @@ create_device_config() {
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.conf" ]; then
         echo -e "${RED}Error: Site '${site_name}' not found${NC}"
-        echo -e "${YELLOW}Please create the site first using create_site_config.sh${NC}"
+        echo -e "${YELLOW}Please create the site first using scripts/create_site_config.sh${NC}"
         return 1
     fi
 
@@ -272,7 +272,7 @@ create_device_config() {
 
     # Render the template
     echo -e "\n${GREEN}Rendering template...${NC}"
-    ./render_template.py "${tmp_config}" -o "${RENDERED_DIR}/${device_name}.yml"
+    ./scripts/render_template.py "${tmp_config}" -o "${RENDERED_DIR}/${device_name}.yml"
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error rendering template. Check your configuration.${NC}"
@@ -549,7 +549,7 @@ while true; do
     echo -e "  5. Remove a device from a site"
     echo -e "  q. Quit"
     echo -e "${BLUE}============================================================${NC}"
-    echo -e "${YELLOW}Note: To create a new site, use the create_site_config.sh script first.${NC}"
+    echo -e "${YELLOW}Note: To create a new site, use the scripts/create_site_config.sh script first.${NC}"
     read -p "Select an option: " option
 
     case $option in

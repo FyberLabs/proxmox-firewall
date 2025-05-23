@@ -81,5 +81,97 @@ variable "vm_templates" {
       enabled = false
       start_on_deploy = true
     }
+    netbird = {
+      enabled = false
+      start_on_deploy = true
+    }
+    headscale = {
+      enabled = false
+      start_on_deploy = true
+    }
+    security_services = {
+      enabled = false
+      start_on_deploy = true
+    }
   }
+}
+
+variable "ubuntu_template_id" {
+  description = "ID of the Ubuntu template to clone"
+  type        = string
+  default     = "9001"
+}
+
+variable "ubuntu_version" {
+  description = "Version of Ubuntu to use"
+  type        = string
+}
+
+variable "ubuntu_image_path" {
+  description = "Path to the Ubuntu template image"
+  type        = string
+}
+
+variable "opnsense_version" {
+  description = "Version of OPNsense to use"
+  type        = string
+}
+
+variable "opnsense_image_path" {
+  description = "Path to the OPNsense image"
+  type        = string
+}
+
+variable "proxmox_storage" {
+  description = "Proxmox storage pool for VM disks"
+  type        = string
+  default     = "local-lvm"
+}
+
+variable "netbird_setup_key" {
+  description = "Netbird setup key for network enrollment"
+  type        = string
+  sensitive   = true
+}
+
+variable "netbird_password" {
+  description = "Password for the Netbird VM"
+  type        = string
+  sensitive   = true
+}
+
+variable "headscale_password" {
+  description = "Password for the Headscale VM"
+  type        = string
+  sensitive   = true
+}
+
+variable "security_password" {
+  description = "Password for the security services VM"
+  type        = string
+  sensitive   = true
+}
+
+variable "pangolin_db_password" {
+  description = "Password for the Pangolin database"
+  type        = string
+  sensitive   = true
+}
+
+variable "pangolin_secret_key" {
+  description = "Secret key for Pangolin SSO"
+  type        = string
+  sensitive   = true
+}
+
+variable "crowdsec_api_key" {
+  description = "API key for Crowdsec"
+  type        = string
+  sensitive   = true
+}
+
+variable "crowdsec_db_password" {
+  description = "Password for the Crowdsec database"
+  type        = string
+  sensitive   = true
 }

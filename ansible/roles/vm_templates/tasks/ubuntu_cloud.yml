@@ -1,25 +1,28 @@
 ---
+- name: Load validated images
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/group_vars/validated_images.json"
+    name: validated_images
+
 - name: Check if Ubuntu cloud image exists
   stat:
-    path: /tmp/ubuntu-noble-server-cloudimg-amd64.img
+    path: "{{ validated_images.ubuntu_image_path }}"
   register: cloud_image
 
-- name: Download Ubuntu cloud image
-  get_url:
-    url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
-    dest: /tmp/ubuntu-noble-server-cloudimg-amd64.img
-    mode: '0644'
+- name: Fail if Ubuntu image not found
+  ansible.builtin.fail:
+    msg: "Ubuntu cloud image not found at {{ validated_images.ubuntu_image_path }}. Please run validate_images.sh first."
   when: not cloud_image.stat.exists
 
 - name: Install required tools
   apt:
-    name: 
+    name:
       - libguestfs-tools
     state: present
 
 - name: Customize cloud image
   shell: >
-    virt-customize -a /tmp/ubuntu-noble-server-cloudimg-amd64.img
+    virt-customize -a {{ validated_images.ubuntu_image_path }}
     --install qemu-guest-agent,openjdk-17-jre,curl
     --update
   args:
@@ -28,7 +31,7 @@
 - name: Create VM template
   shell: >
     qm create {{ template_id }} --name "{{ template_name }}" --memory 1024 --cores 1 --net0 virtio,bridge=vmbr0 &&
-    qm importdisk {{ template_id }} /tmp/ubuntu-noble-server-cloudimg-amd64.img {{ storage_pool }} &&
+    qm importdisk {{ template_id }} {{ validated_images.ubuntu_image_path }} {{ storage_pool }} &&
     qm set {{ template_id }} --scsihw virtio-scsi-pci --virtio0 {{ storage_pool }}:vm-{{ template_id }}-disk-0 &&
     qm set {{ template_id }} --agent 1 &&
     qm set {{ template_id }} --ide2 {{ storage_pool }}:cloudinit &&

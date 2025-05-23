@@ -41,7 +41,7 @@ The device configuration system requires:
 
 - `yq` command-line tool for YAML processing
 - Python 3 with `jinja2` and `pyyaml` modules
-- An existing site configured with the `create_site_config.sh` script
+- An existing site configured with the `scripts/create_site_config.sh` script
 - Appropriate VLAN configurations in OPNsense
 
 ## Template System
@@ -62,12 +62,12 @@ These templates use Jinja2 variables with sensible defaults, allowing you to:
 
 ## Using the Device Configuration Tool
 
-The `add_device.sh` script provides an interactive way to create devices using the template system.
+The `scripts/add_device.sh` script provides an interactive way to create devices using the template system.
 
 ### Usage
 
 ```bash
-./add_device.sh
+./scripts/add_device.sh
 ```
 
 The script offers the following options:
@@ -111,7 +111,7 @@ The script will:
 ### Example Workflow
 
 ```
-$ ./add_device.sh
+$ ./scripts/add_device.sh
 
 1. Create a new device from template
 2. List available device templates
@@ -210,10 +210,10 @@ allow_local_network: true
 
 ### 2. Render the Configuration
 
-Use the `render_template.py` script to generate the final device configuration:
+Use the `scripts/render_template.py` script to generate the final device configuration:
 
 ```bash
-./render_template.py my_nas.yml -o devices/my_nas.yml
+./scripts/render_template.py my_nas.yml -o devices/my_nas.yml
 ```
 
 This will:
@@ -310,38 +310,4 @@ needs_dhcp_reservation: true
 
 The device configuration system:
 
-1. Stores templates in the `templates/devices/` directory
-2. Saves site-specific device instances in `config/devices/<site_name>/`
-3. Renders templates to `devices/` directory
-4. Generates device listings in Ansible group_vars
-5. Updates .env files with MAC addresses for DHCP
-6. Ansible uses these configurations to generate:
-   - Device-specific aliases in OPNsense
-   - Port aliases for each device
-   - Appropriate firewall rules based on device type and VLAN
-   - DHCP reservations for static IP assignment
-
-## Best Practices
-
-1. **Start with examples**: Use the example configurations as a starting point
-2. **Keep templates generic**: Templates should work for most devices of that type
-3. **Use defaults sensibly**: Set sane defaults but allow for overrides
-4. **Document variables**: Comment your templates to explain what each variable does
-5. **Consistent naming**: Use descriptive, lowercase names with underscores
-6. **Device organization**: Group similar devices by function or location
-7. **IP planning**: Follow a consistent IP assignment scheme
-8. **Version control**: Keep your templates and configurations in version control
-
-## Troubleshooting
-
-If you encounter issues:
-
-1. **Validate YAML**: Ensure your configuration YAML is valid
-2. **Check template paths**: Verify template file paths are correct
-3. **Debug rendering**: Use the `-o` flag to output to a file and inspect the result
-4. **Required variables**: Ensure all required variables for a template are provided
-5. **Python requirements**: Make sure you have jinja2 and pyyaml installed (`pip install jinja2 pyyaml`)
-6. **Devices not showing up**: Check the device YAML file and site group_vars
-7. **MAC address not working**: Verify the format and update the .env file
-8. **Firewall rules not applying**: Run with `--tags=firewall` specifically
-9. **DHCP reservations not working**: Check that the MAC is correctly defined 
+1. Stores templates in the `templates/devices/`

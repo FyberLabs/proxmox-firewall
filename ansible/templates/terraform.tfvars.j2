@@ -22,6 +22,18 @@ ssh_private_key_file = "{{ site_config.ssh.private_key_file | default('~/.ssh/id
 # Tailscale configuration
 tailscale_auth_key = "{{ lookup('env', site_config.tailscale.auth_key_env) }}"
 
+# Validated image configuration
+ubuntu_version = "{{ validated_images.ubuntu_version }}"
+ubuntu_image_path = "{{ validated_images.ubuntu_image_path }}"
+opnsense_version = "{{ validated_images.opnsense_version }}"
+opnsense_image_path = "{{ validated_images.opnsense_image_path }}"
+
+# Docker image configurations
+pangolin_image = "{{ validated_images.docker_pangolin_pangolin_latest }}"
+crowdsec_image = "{{ validated_images.docker_crowdsecurity_crowdsec_latest }}"
+crowdsec_dashboard_image = "{{ validated_images.docker_crowdsecurity_cs-dashboard_latest }}"
+postgres_image = "{{ validated_images.docker_postgres_13 }}"
+
 # VM template deployment configuration
 vm_templates:
   opnsense:
@@ -34,5 +46,8 @@ vm_templates:
     enabled: true
     start_on_deploy: false  # Don't start Zeek by default
   tailscale:
+    enabled: true
+    start_on_deploy: true
+  security_services:
     enabled: true
     start_on_deploy: true

@@ -25,10 +25,11 @@
 
 ## Ansible Refactor
 
-- Include in site generation missing ansible vars from env too
-- Remove environment use then if possible
-- Remove Tennessee and Primary Home references
-- Remove hardcoded device references in IPs, MACs, etc.
+- ✅ Include in site generation missing ansible vars from env too
+- ✅ Remove environment use as much as possible
+- ✅ Reload env as needed when updated in README.md steps and master playbook
+- ✅ Remove Tennessee and Primary Home references
+- ✅ Remove hardcoded device references in IPs, MACs, etc.
 
 ## Refactor Firewall
 
@@ -45,29 +46,31 @@
 
 ## Networking
 
-- We should provide dhcp for all local VLANs
-- Test network transition from initial DHCP IPs to Management VLAN IPs
-- Test OPNsense Tailscale integration across sites
+- ✅ Provide DHCP for all local VLANs
+- ✅ Test network transition from initial DHCP IPs to Management VLAN IPs
+- ✅ Test OPNsense Tailscale integration across sites
 
 ## Security & Monitoring
 
-- tailscale terraform to connect networks by firewall
-- Add support for netbird as an alternative to tailscale
-- Support headscale self hosting
-- Also pangolin and crowdsec for SSO WAN access
+- ✅ tailscale terraform to connect networks by firewall
+- ✅ Add support for netbird as an alternative to tailscale
+- ✅ Support headscale self hosting not just tailscale control plane
+- Also VM for pangolin and crowdsec for SSO WAN access
 - Validate image downloads cert/signature
+- Does crowdsec docker actually work OK in proxmox?
+- (https://www.reddit.com/r/selfhosted/comments/1jp5l21/security_measures_when_using_pangolin/)
 
 ## Automation
 
 - Make a requirements script for python and a prereq script that runs it and installs ubuntu packages needed
 - Make a script to find latest sources and hashes and populate a versions file that is sourced by ansible for templates, etc.
-- Automatically get latest Ubuntu base for VMs
+- ✅ Automatically get latest Ubuntu base for VMs
 - Automatically get latest Omada
 - Automatically get latest zeek, pangolin, headscale, etc.
 - Setup ansible for log/metric offloading/rotation/trim, system recovery, removing VM templates, etc.
-- Script to update/redeploy new VM versions
+- Script to update/redeploy/reconfigure new VM versions
 - Verify backup configuration works with both NFS and CIFS
-- Add CEPH blob support?
+- Add CEPH blob backup support?
 
 ## Multi-Site Improvements
 
@@ -78,3 +81,52 @@
 - Support different network topologies per site
 - Create global network sharing ansible for connecting networks by tailscale (terraform), headscale(terraform), and netbird(terraform) depending on site and a yet to be specified global network config.
 - Support self-hosted VPN - Specify DMZ, DMZ VM, cloud VM for headscale or self hosted netbird.
+
+## Validation Tests
+
+### Firewall State Validation
+- Test OPNsense service status and configuration
+  - Verify all required packages are installed (os-tailscale, os-theme-vicuna, os-wireguard)
+  - Check firewall rules are properly applied
+  - Validate NAT rules for WAN failover
+  - Verify DNS resolver configuration
+  - Check DHCP server status and leases
+  - Validate VLAN configuration and tagging
+
+### VM State Validation
+- Test Proxmox VM states
+  - Verify all VMs are running with correct resources
+  - Check cloud-init configuration
+  - Validate network interface assignments
+  - Test VM template versions and updates
+  - Verify backup configuration
+
+### Network Connectivity Tests
+- Test from inside OPNsense
+  - Verify WAN connectivity (both primary and failover)
+  - Test VLAN routing and isolation
+  - Validate DNS resolution
+  - Check DHCP server functionality
+  - Test firewall rule effectiveness
+  - Verify Tailscale subnet routing
+
+- Test from localhost to services
+  - Verify SSH access to all VMs
+  - Test web interface access (OPNsense, Omada)
+  - Validate service ports (Home Assistant, NAS, etc.)
+  - Check Tailscale connectivity
+  - Test cross-site routing
+
+### Security Validation
+- Verify firewall rules
+  - Test VLAN isolation
+  - Validate service access restrictions
+  - Check WAN access controls
+  - Test failover security
+  - Verify Tailscale ACLs
+
+- Test monitoring setup
+  - Verify Zeek logging
+  - Check Suricata rules
+  - Validate log rotation
+  - Test alert configuration

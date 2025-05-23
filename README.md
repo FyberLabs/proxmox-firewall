@@ -720,3 +720,48 @@ The two systems complement each other:
 - Zeek provides deeper analysis for advanced threat hunting
 - Cross-correlation of alerts via syslog integration
 - Firewall rules automatically permit access to management interfaces
+
+## Environment Variables
+
+The system uses environment variables for sensitive configuration. These are stored in a `.env` file in the project root.
+
+### Required Variables
+
+For each site, you need to set:
+
+```bash
+# Site-specific Proxmox API token
+PROXMOX_API_SECRET_<SITE_NAME>_PROXMOX="your_proxmox_api_token"
+
+# Tailscale configuration
+TF_VAR_tailscale_auth_key="your_tailscale_auth_key"
+TF_VAR_tailscale_password="your_tailscale_password"
+
+# Omada Controller
+TF_VAR_omada_password="your_omada_password"
+```
+
+### Updating Environment Variables
+
+1. Edit the `.env` file directly
+2. Run the master playbook to apply changes:
+   ```bash
+   ansible-playbook ansible/master_playbook.yml --tags=always
+   ```
+
+The playbook will:
+- Load the updated environment variables
+- Verify all required variables are present
+- Make them available to all subsequent tasks
+
+### Device MAC Addresses
+
+For devices that need static DHCP reservations, add their MAC addresses to the `.env` file:
+
+```bash
+# Format: <SITE_NAME>_<DEVICE_NAME>_MAC
+PRIMARY_NAS_MAC="00:11:22:33:44:55"
+PRIMARY_NVR_MAC="aa:bb:cc:dd:ee:ff"
+```
+
+You can use the `scripts/add_device.sh` script to automatically add these entries.

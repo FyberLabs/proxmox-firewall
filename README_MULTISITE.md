@@ -20,10 +20,10 @@ Each site has its own:
 
 ## Quick Start
 
-The easiest way to get started is to use the `create_site_config.sh` script:
+The easiest way to get started is to use the `scripts/create_site_config.sh` script:
 
 ```bash
-./create_site_config.sh
+./scripts/create_site_config.sh
 ```
 
 This interactive script will:
@@ -129,7 +129,7 @@ ansible-playbook ansible/master_playbook.yml --limit=primary
 
 ### Adding a new site
 
-1. Use the `create_site_config.sh` script to set up the new site
+1. Use the `scripts/create_site_config.sh` script to set up the new site
 2. Update your `.env` file with any site-specific credentials
 3. Follow the deployment process above for the new site
 

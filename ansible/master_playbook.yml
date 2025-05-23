@@ -1,4 +1,7 @@
 ---
+# Master playbook for Proxmox Firewall deployment
+# This playbook orchestrates the entire deployment process
+
 - name: Master Playbook for Proxmox Firewall Deployment
   hosts: localhost
   gather_facts: false
@@ -38,6 +41,34 @@
         dest: "{{ playbook_dir }}/../.env"
         force: false
         mode: '0600'
+      tags: always
+
+    - name: Load environment variables
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../.env"
+        name: env_vars
+      ignore_errors: true
+      tags: always
+
+    - name: Load site configurations
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ item }}.yml"
+        name: "site_vars"
+      loop: "{{ sites | default(['site1', 'site2']) }}"
+      loop_control:
+        label: "{{ item }}"
+      tags: always
+
+    - name: Verify required environment variables
+      ansible.builtin.fail:
+        msg: "Missing required environment variable: {{ item }}"
+      loop: "{{ site_vars.keys() | map('regex_replace', '^', 'PROXMOX_API_SECRET_') | map('upper') | list + ['TF_VAR_tailscale_auth_key', 'TF_VAR_tailscale_password', 'TF_VAR_omada_password'] }}"
+      when: "item not in env_vars"
+      tags: always
+
+    - name: Set environment variables for Ansible
+      ansible.builtin.set_fact:
+        ansible_env: "{{ ansible_env | combine(env_vars) }}"
       tags: always
 
 # Import playbooks for each stage
@@ -98,14 +129,6 @@
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Load site configurations
-      ansible.builtin.include_vars:
-        file: "group_vars/{{ item }}.yml"
-        name: "site_vars"
-      loop: "{{ sites | default(['site1', 'site2']) }}"
-      loop_control:
-        label: "{{ item }}"
-
     - name: Deployment summary
       ansible.builtin.debug:
         msg:

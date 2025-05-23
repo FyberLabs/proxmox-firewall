@@ -82,9 +82,8 @@ EOL
     # Create site directory for terraform state
     mkdir -p "${TERRAFORM_STATES_DIR}/${site_name}"
 
-    # Add to ansible hosts if it doesn't exist already
-    if [ ! -f "${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml" ]; then
-        cat > "${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml" <<EOL
+    # Create Ansible group vars
+    cat > "${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml" <<EOL
 ---
 # Site-specific variables for ${site_display_name}
 site_config:
@@ -92,8 +91,30 @@ site_config:
   display_name: "${site_display_name}"
   network_prefix: "${network_prefix}"
   domain: "${domain}"
+  proxmox:
+    host: "${proxmox_host}"
+    node_name: "pve"
+    api_secret_env: "PROXMOX_API_SECRET_${site_name^^}_PROXMOX"
+  timezone: "America/New_York"
+  ssh:
+    public_key_file: "{{ playbook_dir }}/../credentials/${site_name}_root.pub"
+    private_key_file: "{{ lookup('env', 'ANSIBLE_SSH_PRIVATE_KEY_FILE') }}"
+  tailscale:
+    auth_key_env: "TF_VAR_tailscale_auth_key"
+  vm_templates:
+    opnsense:
+      enabled: true
+      start_on_deploy: true
+    omada:
+      enabled: true
+      start_on_deploy: true
+    zeek:
+      enabled: true
+      start_on_deploy: false
+    tailscale:
+      enabled: true
+      start_on_deploy: true
 EOL
-    fi
 
     # Add entries to the master hosts.yml if it exists
     if [ -f "${SCRIPT_DIR}/ansible/inventory/hosts.yml" ]; then
@@ -109,7 +130,11 @@ EOL
 ${site_name^^}_PROXMOX_HOST="${proxmox_host}"
 ${site_name^^}_NETWORK_PREFIX="${network_prefix}"
 ${site_name^^}_DOMAIN="${domain}"
-# Device MAC addresses will be added when you run add_device.sh
+${site_name^^}_PROXMOX_API_SECRET="your_proxmox_api_secret"
+${site_name^^}_TAILSCALE_AUTH_KEY="your_tailscale_auth_key"
+${site_name^^}_TAILSCALE_PASSWORD="your_tailscale_password"
+${site_name^^}_OMADA_PASSWORD="your_omada_password"
+# Device MAC addresses will be added when you run scripts/add_device.sh
 # Each device will get its own environment variable with format:
 # ${site_name^^}_DEVICE_NAME_MAC="xx:xx:xx:xx:xx:xx"
 EOL
@@ -118,7 +143,7 @@ EOL
     echo -e "\n${GREEN}Site configuration for ${site_display_name} created successfully!${NC}"
     echo -e "${YELLOW}Next steps:${NC}"
     echo -e "1. Update your .env file with the necessary credentials"
-    echo -e "2. Add network devices using: ./add_device.sh"
+    echo -e "2. Add network devices using: ./scripts/add_device.sh"
     echo -e "3. Deploy the complete infrastructure with Ansible:"
     echo -e "   ansible-playbook ansible/master_playbook.yml --limit=${site_name}"
 }
@@ -228,7 +253,7 @@ deploy_site() {
     echo -e "${YELLOW}Make sure your .env file is updated with credentials for this site${NC}"
     echo
     echo -e "${BLUE}# Configure devices for this site (if not done already)${NC}"
-    echo -e "./add_device.sh"
+    echo -e "./scripts/add_device.sh"
     echo
     echo -e "${BLUE}# Deploy the complete infrastructure with Ansible${NC}"
     echo -e "ansible-playbook ansible/master_playbook.yml --limit=${site_name}"

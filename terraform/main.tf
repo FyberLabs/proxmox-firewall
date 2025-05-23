@@ -42,3 +42,73 @@ locals {
 
 # We use count to control whether each VM is created based on the enabled_templates map
 # The start_on_deploy parameter is handled in each VM's configuration
+
+module "tailscale_network" {
+  source = "./modules/tailscale_network"
+
+  enabled            = var.vm_templates["tailscale"].enabled
+  site_name          = var.site_name
+  site_display_name  = var.site_display_name
+  network_prefix     = var.network_prefix
+  domain            = var.domain
+  target_node       = var.target_node
+  ubuntu_template_id = var.ubuntu_template_id
+  tailscale_password = var.tailscale_password
+  tailscale_auth_key = var.tailscale_auth_key
+  ssh_public_key     = var.ssh_public_key
+  ssh_private_key_file = var.ssh_private_key_file
+  proxmox_storage    = var.proxmox_storage
+}
+
+module "netbird_network" {
+  source = "./modules/netbird_network"
+
+  enabled            = var.vm_templates["netbird"].enabled
+  site_name          = var.site_name
+  site_display_name  = var.site_display_name
+  network_prefix     = var.network_prefix
+  domain            = var.domain
+  target_node       = var.target_node
+  ubuntu_template_id = var.ubuntu_template_id
+  netbird_password   = var.netbird_password
+  netbird_setup_key  = var.netbird_setup_key
+  ssh_public_key     = var.ssh_public_key
+  ssh_private_key_file = var.ssh_private_key_file
+  proxmox_storage    = var.proxmox_storage
+}
+
+module "headscale_network" {
+  source = "./modules/headscale_network"
+
+  enabled            = var.vm_templates["headscale"].enabled
+  site_name          = var.site_name
+  site_display_name  = var.site_display_name
+  network_prefix     = var.network_prefix
+  domain            = var.domain
+  target_node       = var.target_node
+  ubuntu_template_id = var.ubuntu_template_id
+  headscale_password = var.headscale_password
+  ssh_public_key     = var.ssh_public_key
+  ssh_private_key_file = var.ssh_private_key_file
+  proxmox_storage    = var.proxmox_storage
+}
+
+module "security_services" {
+  source = "./modules/security_services"
+
+  enabled            = var.vm_templates["security_services"].enabled
+  site_name          = var.site_name
+  site_display_name  = var.site_display_name
+  network_prefix     = var.network_prefix
+  domain            = var.domain
+  target_node       = var.target_node
+  ubuntu_template_id = var.ubuntu_template_id
+  security_password  = var.security_password
+  pangolin_db_password = var.pangolin_db_password
+  pangolin_secret_key = var.pangolin_secret_key
+  crowdsec_api_key    = var.crowdsec_api_key
+  crowdsec_db_password = var.crowdsec_db_password
+  ssh_public_key     = var.ssh_public_key
+  ssh_private_key_file = var.ssh_private_key_file
+  proxmox_storage    = var.proxmox_storage
+}

@@ -1,0 +1,17 @@
+[global]
+keyboard = "{{ proxmox.answer_file.keyboard | default('en-us') }}"
+country = "{{ proxmox.answer_file.country | default('us') }}"
+timezone = "{{ proxmox.answer_file.timezone | default('UTC') }}"
+root-password = "{{ lookup('password', '/dev/null chars=ascii_letters,digits,punctuation length=32') | password_hash('sha512') }}"
+mailto = "{{ lookup('env', 'PROXMOX_ADMIN_EMAIL') }}"
+fqdn.source = "from-dhcp"
+fqdn.domain = "{{ lookup('env', 'PROXMOX_FQDN') }}"
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+lvm.swapsize = 8
+lvm.maxroot = 32
+disk-list = ['sda']

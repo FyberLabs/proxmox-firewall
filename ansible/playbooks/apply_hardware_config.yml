@@ -1,0 +1,138 @@
+---
+- name: Apply Hardware Configuration
+  hosts: proxmox
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../vars/{{ inventory_hostname }}.yml"
+
+  tasks:
+    - name: Validate hardware configuration
+      ansible.builtin.shell: "{{ playbook_dir }}/../../scripts/validate_hardware_config.sh {{ playbook_dir }}/../vars/{{ inventory_hostname }}.yml"
+      register: validation_result
+      changed_when: false
+
+    - name: Configure CPU settings
+      block:
+        - name: Set CPU governor
+          ansible.builtin.shell: |
+            echo "performance" > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+          when: ansible_processor_vcpus > 1
+          register: governor_result
+          changed_when: governor_result.stdout != "performance"
+
+        - name: Configure CPU isolation
+          ansible.builtin.shell: |
+            echo "{{ item }}" > /sys/devices/system/cpu/isolated
+          with_items: "{{ range(1, ansible_processor_vcpus) | list }}"
+          when: ansible_processor_vcpus > 1
+          register: isolation_result
+          changed_when: isolation_result.stdout != ""
+
+    - name: Configure memory settings
+      block:
+        - name: Set swappiness
+          ansible.posix.sysctl:
+            name: vm.swappiness
+            value: "10"
+            state: present
+            reload: true
+
+        - name: Set vfs_cache_pressure
+          ansible.posix.sysctl:
+            name: vm.vfs_cache_pressure
+            value: "50"
+            state: present
+            reload: true
+
+    - name: Configure storage settings
+      block:
+        - name: Set IO scheduler
+          ansible.builtin.shell: |
+            echo "none" > /sys/block/{{ item }}/queue/scheduler
+          with_items: "{{ ansible_devices.keys() }}"
+          when: ansible_devices[item].rotational == "0"
+          register: scheduler_result
+          changed_when: scheduler_result.stdout != "none"
+
+        - name: Set read-ahead
+          ansible.builtin.shell: |
+            echo "4096" > /sys/block/{{ item }}/queue/read_ahead_kb
+          with_items: "{{ ansible_devices.keys() }}"
+          when: ansible_devices[item].rotational == "0"
+          register: readahead_result
+          changed_when: readahead_result.stdout != "4096"
+
+    - name: Configure network settings
+      block:
+        - name: Set network interface parameters
+          ansible.posix.sysctl:
+            name: "{{ item.name }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: true
+          with_items:
+            - { name: 'net.core.rmem_max', value: '16777216' }
+            - { name: 'net.core.wmem_max', value: '16777216' }
+            - { name: 'net.ipv4.tcp_rmem', value: '4096 87380 16777216' }
+            - { name: 'net.ipv4.tcp_wmem', value: '4096 87380 16777216' }
+
+        - name: Configure network interfaces
+          ansible.builtin.blockinfile:
+            path: /etc/network/interfaces
+            block: |
+              # {{ item.name }} configuration
+              auto {{ item.name }}
+              iface {{ item.name }} inet manual
+                {% if item.vlan %}
+                bridge_vlan_aware yes
+                bridge_vids {{ item.vlan | join(' ') }}
+                {% endif %}
+            marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item.name }}"
+          with_items: "{{ hardware.network.interfaces }}"
+
+        - name: Configure network bridges
+          ansible.builtin.blockinfile:
+            path: /etc/network/interfaces
+            block: |
+              # {{ item.name }} configuration
+              auto {{ item.name }}
+              iface {{ item.name }} inet manual
+                bridge_ports {{ item.interface }}
+                {% if item.vlans %}
+                bridge_vlan_aware yes
+                bridge_vids {{ item.vlans | join(' ') }}
+                {% endif %}
+            marker: "# {mark} ANSIBLE MANAGED BLOCK - {{ item.name }}"
+          with_items: "{{ hardware.network.bridges }}"
+
+    - name: Configure Proxmox storage
+      block:
+        - name: Set VM resource limits
+          ansible.builtin.shell: |
+            pvesm set {{ item.name }} --maxfiles {{ item.maxfiles }} --maxdisk {{ item.maxdisk }}
+          with_items: "{{ proxmox.storage }}"
+          when: item.type == "local"
+          register: storage_result
+          changed_when: storage_result.stdout != ""
+
+        - name: Configure backup storage
+          ansible.builtin.shell: |
+            pvesm add {{ item.type }} {{ item.name }} --server {{ item.server }} --path {{ item.path }}
+          with_items: "{{ proxmox.storage }}"
+          when: item.type != "local"
+          register: backup_result
+          changed_when: backup_result.stdout != ""
+
+    - name: Restart networking
+      ansible.builtin.service:
+        name: networking
+        state: restarted
+
+    - name: Restart Proxmox services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+      with_items:
+        - pveproxy
+        - pvedaemon
+        - pvestatd

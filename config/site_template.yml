@@ -1,0 +1,127 @@
+site:
+  name: "site_name"
+  network_prefix: "10.x"  # Unique for each site
+  domain: "site.local"
+
+  # Hardware Configuration
+  hardware:
+    # CPU Configuration
+    cpu:
+      type: "n100"  # or n305
+      cores: 4      # Number of CPU cores
+      threads: 4    # Number of threads per core
+
+    # Memory Configuration
+    memory:
+      total: "8gb"  # or 16gb
+      vm_allocation:
+        opnsense: "4gb"
+        omada: "2gb"
+        homeassistant: "2gb"
+
+    # Storage Configuration
+    storage:
+      type: "ssd"   # or nvme
+      size: "128gb" # or 256gb, 512gb
+      allocation:
+        system: "20gb"
+        vms: "80gb"
+        backups: "28gb"
+
+    # Network Port Configuration
+    network:
+      # Physical port mapping to VLANs and functions
+      interfaces:
+        - name: "eth0"
+          type: "2.5gbe"
+          role: "wan"
+          vlan: null
+        - name: "eth1"
+          type: "2.5gbe"
+          role: "wan_backup"
+          vlan: null
+        - name: "eth2"
+          type: "10gbe"
+          role: "lan"
+          vlan: [10, 30, 40, 50]  # Main, IoT, Guest, Management
+        - name: "eth3"
+          type: "10gbe"
+          role: "cameras"
+          vlan: [20]  # Cameras
+
+      # VLAN Configuration
+      vlans:
+        - id: 10
+          name: "main"
+          subnet: "10.x.10.0/24"
+          dhcp: true
+          gateway: "10.x.10.1"
+        - id: 20
+          name: "cameras"
+          subnet: "10.x.20.0/24"
+          dhcp: true
+          gateway: "10.x.20.1"
+        - id: 30
+          name: "iot"
+          subnet: "10.x.30.0/24"
+          dhcp: true
+          gateway: "10.x.30.1"
+        - id: 40
+          name: "guest"
+          subnet: "10.x.40.0/24"
+          dhcp: true
+          gateway: "10.x.40.1"
+        - id: 50
+          name: "management"
+          subnet: "10.x.50.0/24"
+          dhcp: true
+          gateway: "10.x.50.1"
+
+      # Bridge Configuration
+      bridges:
+        - name: "vmbr0"
+          interface: "eth2"
+          vlans: [10, 30, 40, 50]
+          description: "LAN Bridge"
+        - name: "vmbr1"
+          interface: "eth0"
+          vlans: null
+          description: "WAN Bridge"
+        - name: "vmbr2"
+          interface: "eth3"
+          vlans: [20]
+          description: "Camera Bridge"
+        - name: "vmbr3"
+          interface: "eth1"
+          vlans: null
+          description: "WAN Backup Bridge"
+
+  # Proxmox Configuration
+  proxmox:
+    # Answer file customization
+    answer_file:
+      hostname: "proxmox"
+      ip_address: "10.x.50.1"
+      netmask: "255.255.255.0"
+      gateway: "10.x.50.1"
+      dns: "1.1.1.1"
+      country: "US"
+      keyboard: "us"
+      timezone: "UTC"
+      root_password: "CHANGE_ME"
+
+    # Storage Configuration
+    storage:
+      local:
+        path: "/var/lib/vz"
+        type: "ext4"
+      backup:
+        type: "nfs"  # or cifs, ceph
+        server: "10.x.50.100"
+        path: "/mnt/backups"
+
+    # VM Resource Limits
+    resource_limits:
+      cpu_units: 1000
+      memory_units: 1024
+      disk_units: 1024

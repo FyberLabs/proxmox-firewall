@@ -1,0 +1,72 @@
+---
+- name: Create Proxmox ISO with Site Configuration
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../vars/{{ site_name }}.yml"
+
+  tasks:
+    - name: Check for validated images
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../group_vars/validated_images.json"
+      register: validated_images
+
+    - name: Fail if validated images not found
+      ansible.builtin.fail:
+        msg: "Validated images JSON file not found. Please run download_latest_images.sh first."
+      when: not validated_images.stat.exists
+
+    - name: Get Proxmox ISO path
+      ansible.builtin.shell: jq -r '.proxmox_iso_path' "{{ playbook_dir }}/../group_vars/validated_images.json"
+      register: proxmox_iso_path
+      changed_when: false
+
+    - name: Check if Proxmox ISO exists
+      ansible.builtin.stat:
+        path: "{{ proxmox_iso_path.stdout }}"
+      register: proxmox_iso
+      when: proxmox_iso_path.stdout != "null"
+
+    - name: Fail if Proxmox ISO not found
+      ansible.builtin.fail:
+        msg: "Validated Proxmox ISO not found. Please run download_latest_images.sh first."
+      when: proxmox_iso_path.stdout == "null" or not proxmox_iso.stat.exists
+
+    - name: Create temporary directory
+      ansible.builtin.file:
+        path: "/tmp/proxmox-iso"
+        state: directory
+        mode: '0755'
+
+    - name: Copy validated ISO
+      ansible.builtin.copy:
+        src: "{{ proxmox_iso_path.stdout }}"
+        dest: "/tmp/proxmox-iso/proxmox-original.iso"
+        remote_src: true
+        mode: '0644'
+
+    - name: Create answer.toml
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/proxmox-answer.toml.j2"
+        dest: "/tmp/proxmox-iso/answer.toml"
+        mode: '0644'
+
+    - name: Prepare custom ISO
+      ansible.builtin.shell:
+        cmd: |
+          proxmox-auto-install-assistant prepare-iso \
+            "/tmp/proxmox-iso/proxmox-original.iso" \
+            --fetch-from iso \
+            --answer-file "/tmp/proxmox-iso/answer.toml" \
+            --output "{{ playbook_dir }}/../../output/{{ site_name }}_proxmox.iso"
+      args:
+        creates: "{{ playbook_dir }}/../../output/{{ site_name }}_proxmox.iso"
+
+    - name: Clean up temporary files
+      ansible.builtin.file:
+        path: "/tmp/proxmox-iso"
+        state: absent
+
+    - name: Display ISO creation status
+      ansible.builtin.debug:
+        msg: "Created Proxmox ISO for {{ site_name }} at {{ playbook_dir }}/../../output/{{ site_name }}_proxmox.iso"

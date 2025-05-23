@@ -1,0 +1,44 @@
+---
+# Proxmox VE Answer File
+# Generated for site: {{ site.name }}
+
+# Network Configuration
+network:
+  interface: eth0
+  ip_address: {{ proxmox.answer_file.ip_address }}
+  netmask: {{ proxmox.answer_file.netmask }}
+  gateway: {{ proxmox.answer_file.gateway }}
+  dns: {{ proxmox.answer_file.dns }}
+
+# System Configuration
+system:
+  hostname: {{ proxmox.answer_file.hostname }}
+  timezone: {{ proxmox.answer_file.timezone }}
+  keyboard: {{ proxmox.answer_file.keyboard }}
+  country: {{ proxmox.answer_file.country }}
+  fqdn: {{ lookup('env', 'PROXMOX_FQDN') }}
+
+# Storage Configuration
+storage:
+  type: {{ hardware.storage.type }}
+  size: {{ hardware.storage.size }}
+  allocation:
+    system: {{ hardware.storage.allocation.system }}
+    vms: {{ hardware.storage.allocation.vms }}
+    backups: {{ hardware.storage.allocation.backups }}
+
+# Security Configuration
+security:
+  root_password: {{ lookup('env', 'PROXMOX_ROOT_PASSWORD') }}
+  admin_email: {{ lookup('env', 'PROXMOX_ADMIN_EMAIL') }}
+  ssh_key: {{ proxmox.answer_file.ssh_key | default('') }}
+
+# Installation Options
+installation:
+  target_disk: sda
+  install_quorum: false
+  install_ceph: false
+  install_zfs: true
+  zfs_raid_level: mirror
+  zfs_compression: lz4
+  zfs_ashift: 12

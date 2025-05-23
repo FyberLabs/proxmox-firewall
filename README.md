@@ -143,11 +143,6 @@ ANSIBLE_SSH_PRIVATE_KEY_FILE=~/.ssh/id_rsa
 <site_name>_<device_name>_MAC="xx:xx:xx:xx:xx:xx"
 ```
 
-### Tasks
-
-- Create Proxmox ISO with answer file
-- Run ansible playbooks to configure proxmox, network, deploy VMs by terraform, etc.
-
 ### VMs
 
 - OPNSense with tailscale, vtnet network devices
@@ -170,7 +165,7 @@ ANSIBLE_SSH_PRIVATE_KEY_FILE=~/.ssh/id_rsa
 
 - Setup:
   - Create a Linux bridge (vmbr0) in Proxmox for LAN (e.g., 10Gb SFP+ port) and another (vmbr1) for WAN (e.g., 2.5GbE port). Ensure the Proxmox management interface is on a separate VLAN (e.g., VLAN1) to avoid WAN exposure.
-  - Use VirtIO NICs for the OPNsense VM, attaching them to vmbr0 (LAN) and vmbr1 (WAN). Enable VLAN tagging in OPNsense for your IP scheme (e.g., 10.1.0.0/16 for Tennessee, 10.2.0.0/16 for primary home).
+  - Use VirtIO NICs for the OPNsense VM, attaching them to vmbr0 (LAN) and vmbr1 (WAN). Enable VLAN tagging in OPNsense for your IP scheme (e.g., 10.1.0.0/16 for Site1, 10.2.0.0/16 for Site2).
   - Configure the Omada controller LXC with a VirtIO NIC on vmbr0 for LAN access to manage APs/Decos.
 
 ## Firewall configuration
@@ -179,7 +174,7 @@ Network Context
 
 - IP Ranges(from the previous IP range diagram):
 
-  - Tennessee:
+  - Site1:
 
     - VLAN 10 (Main LAN): 10.1.10.0/24 (e.g., Home Assistant: 10.1.10.10, future NAS: 10.1.10.100)
     - VLAN 20 (Cameras): 10.1.20.0/24 (Reolink Pro Hub: 10.1.20.2, Dahua NVR: 10.1.20.3)
@@ -187,27 +182,18 @@ Network Context
     - VLAN 40 (Guest): 10.1.40.0/24
     - VLAN 50 (Management): 10.1.50.0/24 (Omada Controller: 10.1.50.2)
 
-  - Primary Home:
+  - Site(n):
 
     - VLAN 10 (Main LAN): 10.2.10.0/24 (Home Assistant: 10.2.10.10, NAS: 10.2.10.100, Desktops: 10.2.10.101–110)
     - VLAN 20 (Cameras): 10.2.20.0/24 (Dahua NVR: 10.2.20.2, WiFi Cameras: 10.2.20.3+)
     - VLAN 30 (IoT): 10.2.30.0/24
     - VLAN 40 (Guest): 10.2.40.0/24
     - VLAN 50 (Management): 10.2.50.0/24 (Omada Controller: 10.2.50.2)
-  - Tailscale: 100.64.0.0/10 (e.g., Tennessee OPNSense: 100.64.1.1, Primary Home NAS: 100.64.1.4)
-
-- Goals:
-
-  - Allow Tennessee devices (VLAN 10) to access the Primary Home NAS (10.2.10.100) via SMB/NFS.
-  - Permit Omada controller (10.1.50.2 or 10.2.50.2) to manage APs across both homes.
-  - Enable Home Assistant access (10.1.10.10, 10.2.10.10) across sites.
-  - Restrict camera VLAN (20) to local NVR and limited remote access.
-  - Isolate IoT (VLAN 30) and Guest (VLAN 40) from sensitive resources.
-  - Allow Tailscale VPN traffic (UDP 41641) and ensure Starlink compatibility.
+  - Tailscale: 100.64.0.0/10 (e.g., Site1 OPNSense: 100.64.1.1, Site2 NAS: 100.64.1.4)
   
 - Assumptions:
 
-  - Both OPNSense firewalls handle 10Gbps fiber and Starlink WANs.
+  - Both OPNSense firewalls handle up to 10Gbps fiber and Starlink WANs.
   - Tailscale is configured with subnet routing for 10.1.x.x and 10.2.x.x.
   - Devices use static IPs where specified; others use DHCP (e.g., 10.1.10.100–254).
 
@@ -236,14 +222,13 @@ General Firewall Rule Principles
 - Default Deny: OPNSense blocks all traffic unless explicitly allowed.
 - VLAN Segregation: Restrict inter-VLAN access unless necessary (e.g., IoT can't access Main LAN).
 - Tailscale Security: Use Tailscale ACLs alongside OPNSense rules for layered protection.
-- Minimal Exposure: Allow only required ports/protocols (e.g., 445 for SMB, 8123 for Home Assistant).
 - Logging: Enable logging for troubleshooting but disable for high-traffic rules to reduce load.
 
 Recommended Firewall Rules
 
-Below are the firewall rules for each home, organized by interface (WAN, VLAN 10, VLAN 20, VLAN 30, VLAN 40, VLAN 50). Rules are designed to be symmetric where possible, with adjustments for the NAS in the Primary Home and WiFi-only devices in Tennessee.
+Below are the firewall rules for each home, organized by interface (WAN, VLAN 10, VLAN 20, VLAN 30, VLAN 40, VLAN 50). Rules are designed to be symmetric where possible, with adjustments for the NAS in the Site2 and WiFi-only devices in Site1.
 
-Tennessee Vacation Home Firewall Rules
+Site1 Firewall Rules
 
 Interface: WAN
 
@@ -263,10 +248,10 @@ Interface: VLAN 10 (Main LAN, 10.1.10.0/24)
 |||||||
 |---|---|---|---|---|---|
 |Order|Action|Source|Destination|Protocol/Port|Description|
-|1|Allow|10.1.10.0/24|10.2.10.100|TCP/445,2049|Access Primary Home NAS (SMB/NFS)|
-|2|Allow|10.1.10.0/24|10.2.10.10|TCP/8123|Access Primary Home Assistant|
+|1|Allow|10.1.10.0/24|10.2.10.100|TCP/445,2049|Access Site2 NAS (SMB/NFS)|
+|2|Allow|10.1.10.0/24|10.2.10.10|TCP/8123|Access Site2 Assistant|
 |3|Allow|10.1.10.0/24|10.1.50.2|TCP/8088,8043, UDP/27001, TCP/29810-29814|Local Omada Controller|
-|4|Allow|10.1.10.0/24|10.2.50.2|TCP/8088,8043, UDP/27001, TCP/29810-29814|Primary Home Omada Controller (if managing cross-home)|
+|4|Allow|10.1.10.0/24|10.2.50.2|TCP/8088,8043, UDP/27001, TCP/29810-29814|Site2 Omada Controller (if managing cross-home)|
 |5|Allow|10.1.10.0/24|Any|TCP/80,443|Internet access (HTTP/HTTPS)|
 |6|Allow|10.1.10.0/24|10.1.30.0/24|Any|Access IoT VLAN (e.g., for Home Assistant)|
 |7|Block|10.1.10.0/24|10.1.20.0/24|Any|Block access to Camera VLAN|
@@ -274,7 +259,7 @@ Interface: VLAN 10 (Main LAN, 10.1.10.0/24)
 
 - Notes:
 
-  - Allows WiFi laptops to access the Primary Home NAS and Home Assistant over Tailscale-routed subnets.
+  - Allows WiFi laptops to access the Site2 NAS and Home Assistant over Tailscale-routed subnets.
   - Omada ports are for AP management; cross-home access is optional (e.g., one controller managing both sites).
   - Internet access is unrestricted for VLAN 10 but can be filtered (e.g., DNS via Pi-hole).
   - IoT access is allowed for Home Assistant integration; cameras and guests are isolated.
@@ -328,7 +313,7 @@ Interface: VLAN 50 (Management, 10.1.50.0/24)
 |---|---|---|---|---|---|
 |Order|Action|Source|Destination|Protocol/Port|Description|
 |1|Allow|10.1.50.2|10.1.10.0/24, 10.1.20.0/24|TCP/8088,8043, UDP/27001, TCP/29810-29814|Omada to local APs/Decos|
-|2|Allow|10.1.50.2|10.2.10.0/24, 10.2.20.0/24|TCP/8088,8043, UDP/27001, TCP/29810-29814|Omada to Primary Home APs/Decos|
+|2|Allow|10.1.50.2|10.2.10.0/24, 10.2.20.0/24|TCP/8088,8043, UDP/27001, TCP/29810-29814|Omada to Site2 APs/Decos|
 |3|Allow|10.1.10.0/24|10.1.50.2|TCP/8088,8043|Local management of Omada|
 |4|Block|10.1.50.0/24|Any|Any|Block all other traffic|
 
@@ -337,7 +322,7 @@ Interface: VLAN 50 (Management, 10.1.50.0/24)
   - Omada controller manages APs/Decos locally and optionally cross-home.
   - Only Main LAN can access the controller's UI.
 
-Primary Home Firewall Rules
+Site2 Firewall Rules
 
 Interface: WAN
 
@@ -358,9 +343,9 @@ Interface: VLAN 10 (Main LAN, 10.2.10.0/24)
 |---|---|---|---|---|---|
 |Order|Action|Source|Destination|Protocol/Port|Description|
 |1|Allow|10.2.10.0/24|10.2.10.100|TCP/445,2049|Local NAS access (SMB/NFS)|
-|2|Allow|10.2.10.0/24|10.1.10.10|TCP/8123|Access Tennessee Home Assistant|
+|2|Allow|10.2.10.0/24|10.1.10.10|TCP/8123|Access Site1 Home Assistant|
 |3|Allow|10.2.10.0/24|10.2.50.2|TCP/8088,8043, UDP/27001, TCP/29810-29814|Local Omada Controller|
-|4|Allow|10.2.10.0/24|10.1.50.2|TCP/8088,8043, UDP/27001, TCP/29810-29814|Tennessee Omada Controller (if managing cross-home)|
+|4|Allow|10.2.10.0/24|10.1.50.2|TCP/8088,8043, UDP/27001, TCP/29810-29814|Site1 Omada Controller (if managing cross-home)|
 |5|Allow|10.2.10.0/24|Any|TCP/80,443|Internet access|
 |6|Allow|10.2.10.0/24|10.2.30.0/24|Any|Access IoT VLAN|
 |7|Block|10.2.10.0/24|10.2.20.0/24|Any|Block access to Camera VLAN|
@@ -369,7 +354,7 @@ Interface: VLAN 10 (Main LAN, 10.2.10.0/24)
 - Notes:
 
   - Adds local NAS access for laptops/desktops.
-  - Symmetric to Tennessee for cross-home Home Assistant and Omada access.
+  - Symmetric to Site1 for cross-home Home Assistant and Omada access.
 
 Interface: VLAN 20 (Cameras, 10.2.20.0/24)
 
@@ -384,7 +369,7 @@ Interface: VLAN 20 (Cameras, 10.2.20.0/24)
 
 - Notes:
 
-  - Identical to Tennessee, adjusted for Primary Home IPs.
+  - Identical to Site1, adjusted for Site2 IPs.
 
 Interface: VLAN 30 (IoT, 10.2.30.0/24)
 
@@ -397,7 +382,7 @@ Interface: VLAN 30 (IoT, 10.2.30.0/24)
 
 - Notes:
 
-  - Same as Tennessee.
+  - Same as Site1.
 
 Interface: VLAN 40 (Guest, 10.2.40.0/24)
 
@@ -409,7 +394,7 @@ Interface: VLAN 40 (Guest, 10.2.40.0/24)
 
 - Notes:
 
-  - Same as Tennessee.
+  - Same as Site1.
 
 Interface: VLAN 50 (Management, 10.2.50.0/24)
 
@@ -417,13 +402,13 @@ Interface: VLAN 50 (Management, 10.2.50.0/24)
 |---|---|---|---|---|---|
 |Order|Action|Source|Destination|Protocol/Port|Description|
 |1|Allow|10.2.50.2|10.2.10.0/24, 10.2.20.0/24|TCP/8088,8043, UDP/27001, TCP/29810-29814|Omada to local APs/Decos|
-|2|Allow|10.2.50.2|10.1.10.0/24, 10.1.20.0/24|TCP/8088,8043, UDP/27001, TCP/29810-29814|Omada to Tennessee APs/Decos|
+|2|Allow|10.2.50.2|10.1.10.0/24, 10.1.20.0/24|TCP/8088,8043, UDP/27001, TCP/29810-29814|Omada to Site1 APs/Decos|
 |3|Allow|10.2.10.0/24|10.2.50.2|TCP/8088,8043|Local management of Omada|
 |4|Block|10.2.50.0/24|Any|Any|Block all other traffic|
 
 - Notes:
 
-  - Symmetric to Tennessee, with cross-home Omada management optional.
+  - Symmetric to Site1, with cross-home Omada management optional.
 
 Tailscale ACLs (Complementary)
 
@@ -438,7 +423,7 @@ json
     {"action": "accept", "src": ["10.1.10.0/24", "10.2.10.0/24"], "dst": ["10.2.10.100:445", "10.2.10.100:2049"]},
     // Home Assistant access
     {"action": "accept", "src": ["10.1.10.0/24", "10.2.10.0/24"], "dst": ["10.1.10.10:8123", "10.2.10.10:8123"]},
-    // Omada controller (Tennessee managing both homes)
+    // Omada controller (Site1 managing both homes)
     {"action": "accept", "src": ["10.1.50.2"], "dst": ["10.1.10.0/24:8088,8043,27001,29810-29814", "10.1.20.0/24:8088,8043,27001,29810-29814", "10.2.10.0/24:8088,8043,27001,29810-29814", "10.2.20.0/24:8088,8043,27001,29810-29814"]},
     // NVR remote access
     {"action": "accept", "src": ["100.64.0.0/10"], "dst": ["10.1.20.3:443", "10.2.20.3:443"]}
@@ -449,7 +434,7 @@ json
 - Notes:
 
   - Restricts Tailscale traffic to specific services.
-  - Adjust if using Primary Home's Omada controller or dual controllers.
+  - Adjust if using Site2's Omada controller or dual controllers.
 
 Implementation Steps
 
@@ -460,7 +445,7 @@ Implementation Steps
    - Set "Log" for initial testing, then disable for high-traffic rules (e.g., internet access).
 2. Test Rules:
 
-   - From Tennessee VLAN 10 (e.g., a laptop), access the NAS (10.2.10.100) via SMB (smb://100.64.1.4).
+   - From Site1 VLAN 10 (e.g., a laptop), access the NAS (10.2.10.100) via SMB (smb://100.64.1.4).
    - Verify Home Assistant (10.1.10.10, 10.2.10.10) is accessible cross-home.
    - Check Omada controller (10.1.50.2) manages APs/Decos in both homes.
    - Confirm cameras (VLAN 20) are isolated except for NVR and Home Assistant.
@@ -472,7 +457,7 @@ Implementation Steps
 4. Update Tailscale ACLs:
 
    - Edit ACLs in the Tailscale admin console to match the above JSON.
-   - Test withtailscale ping 10.2.10.100from Tennessee.
+   - Test withtailscale ping 10.2.10.100from Site1.
 
 Considerations
 
@@ -483,7 +468,7 @@ Considerations
   - This approach significantly reduces attack surface and external exposure.
 - Omada Management:
 
-  - The rules assume one Omada controller (e.g., Tennessee's 10.1.50.2) manages both homes. If using dual controllers, adjust VLAN 50 rules.
+  - The rules assume one Omada controller (e.g., Site1's 10.1.50.2) manages both homes. If using dual controllers, adjust VLAN 50 rules.
 - Camera Isolation:
 
   - VLAN 20 is locked down to prevent unauthorized access. Add rules for cross-home NVR access if needed.
@@ -492,7 +477,7 @@ Considerations
   - Tailscale's UDP 41641 rule ensures connectivity despite Starlink's CGNAT.
 - Future NAS:
 
-  - When adding Tennessee's NAS (10.1.10.100), mirror Primary Home's NAS rules (e.g., allow 10.2.10.0/24 to 10.1.10.100:445,2049).
+  - When adding Site1's NAS (10.1.10.100), mirror Site2's NAS rules (e.g., allow 10.2.10.0/24 to 10.1.10.100:445,2049).
 - Performance:
 
   - Rules are lightweight, but enable hardware offloading in OPNSense (System > Settings > Miscellaneous) for 10Gbps throughput.
@@ -504,8 +489,8 @@ Testing and Validation
 
 - Cross-Home Access:
 
-  - Tennessee laptop to Primary Home NAS:smb://10.2.10.100orsmb://100.64.1.4.
-  - Primary Home desktop to Tennessee Home Assistant:https://10.1.10.10:8123.
+  - Site1 laptop to Site2 NAS:smb://10.2.10.100orsmb://100.64.1.4.
+  - Site2 desktop to Site1 Home Assistant:https://10.1.10.10:8123.
 - VLAN Isolation:
 
   - Guest device (10.1.40.x) should fail to ping 10.1.10.10.
@@ -646,8 +631,8 @@ The deployment configures the following network bridges:
 
 IP schemes:
 
-- Tennessee: 10.1.x.x/16
-- Primary Home: 10.2.x.x/16
+- Site1: 10.1.x.x/16
+- Site2: 10.2.x.x/16
 
 ### Deployed VMs
 
@@ -692,14 +677,14 @@ Comprehensive firewall rules are applied to:
 Each network interface has its own DHCP server with appropriate IP ranges and static mappings for:
 - Home Assistant (10.x.10.10)
 - Omada Controller (10.x.50.2)
-- NAS (10.2.10.100 - Primary Home only)
+- NAS (10.2.10.100 - Site2 only)
 - Camera equipment (Reolink Hub, NVR)
 
 #### Tailscale Integration
 
 Both firewalls are configured as Tailscale exit nodes advertising their respective subnets:
-- Tennessee: 10.1.0.0/16
-- Primary Home: 10.2.0.0/16
+- Site1: 10.1.0.0/16
+- Site2: 10.2.0.0/16
 
 This allows secure communication between the sites via the Tailscale mesh network.
 

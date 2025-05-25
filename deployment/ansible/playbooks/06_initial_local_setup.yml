@@ -1,0 +1,93 @@
+---
+- name: Initial Local Setup
+  hosts: proxmox
+  become: true
+  vars:
+    sites_dir: /opt/proxmox-firewall/common/config/sites
+    devices_dir: /opt/proxmox-firewall/common/config/devices
+    ansible_user: ansible
+    ansible_group: ansible
+
+  tasks:
+    - name: Get hostname
+      ansible.builtin.command: hostname
+      register: hostname_result
+      changed_when: false
+
+    - name: Find matching site configuration
+      ansible.builtin.find:
+        paths: "{{ sites_dir }}"
+        patterns: "*.yml"
+      register: site_configs
+      delegate_to: localhost
+
+    - name: Load and check site configurations
+      ansible.builtin.include_vars:
+        file: "{{ item.path }}"
+        name: "site_config_{{ item.path | basename | splitext | first }}"
+      loop: "{{ site_configs.files }}"
+      delegate_to: localhost
+
+    - name: Find matching site by hostname
+      ansible.builtin.set_fact:
+        matched_site: "{{ item.key }}"
+        site_config: "{{ item.value }}"
+      loop: "{{ site_configs | dict2items }}"
+      when: hostname_result.stdout in item.value.hostnames
+      register: site_match
+      delegate_to: localhost
+
+    - name: Fail if no matching site found
+      ansible.builtin.fail:
+        msg: "No site configuration found matching hostname {{ hostname_result.stdout }}"
+      when: site_match is not defined or site_match.results | selectattr('skipped', 'undefined') | list | length == 0
+
+    - name: Create ansible group
+      ansible.builtin.group:
+        name: "{{ ansible_group }}"
+        state: present
+
+    - name: Create ansible user
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        group: "{{ ansible_group }}"
+        shell: /bin/bash
+        create_home: true
+        state: present
+
+    - name: Set up sudo access for ansible user
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/ansible
+        content: "{{ ansible_user }} ALL=(ALL) NOPASSWD: ALL"
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s
+
+    - name: Create .ssh directory for ansible user
+      ansible.builtin.file:
+        path: /home/{{ ansible_user }}/.ssh
+        state: directory
+        mode: '0700'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_group }}"
+
+    - name: Copy root's authorized keys to ansible user
+      ansible.builtin.copy:
+        src: /root/.ssh/authorized_keys
+        dest: /home/{{ ansible_user }}/.ssh/authorized_keys
+        mode: '0600'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_group }}"
+        remote_src: true
+
+    - name: Display setup completion message
+      ansible.builtin.debug:
+        msg:
+          - "========================================================"
+          - "Initial Local Setup Complete"
+          - "========================================================"
+          - "Site: {{ matched_site }}"
+          - "Device: {{ hostname_result.stdout }}"
+          - "Ansible user created with sudo access"
+          - "Configuration file created:"
+          - "  - {{ devices_dir }}/{{ hostname_result.stdout }}.yml"
+          - "========================================================"

@@ -39,6 +39,7 @@ All notable changes to this project will be documented in this file.
 
 #### Ansible Refactoring
 
+- Split ansible into deployment and local playbooks
 - Included missing ansible vars from env in site generation
 - Removed environment use where possible
 - Added env reload when updated in README.md steps and master playbook
@@ -113,4 +114,4 @@ All notable changes to this project will be documented in this file.
 - Implemented tailscale terraform for network connections
 - Added support for netbird as an alternative to tailscale
 - Added support for headscale self-hosting
-- Implemented image download certificate/signature validation 
+- Implemented image download certificate/signature validation

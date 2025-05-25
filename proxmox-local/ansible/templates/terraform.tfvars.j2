@@ -1,0 +1,53 @@
+# Terraform variables for {{ site_config.display_name }}
+# Generated from site configuration
+
+# Proxmox connection
+proxmox_host = "{{ site_config.proxmox.host | default(inventory_hostname) }}"
+proxmox_api_secret = "{{ lookup('env', site_config.proxmox.api_secret_env) }}"
+
+# Site configuration
+site_name = "{{ site_config.name }}"
+site_display_name = "{{ site_config.display_name }}"
+network_prefix = "{{ site_config.network_prefix }}"
+domain = "{{ site_config.domain }}"
+
+# Common configuration
+timezone = "{{ site_config.timezone | default('UTC') }}"
+target_node = "{{ site_config.proxmox.node_name | default('pve') }}"
+
+# SSH configuration
+ssh_public_key = "{{ lookup('file', site_config.ssh.public_key_file | default('~/.ssh/id_rsa.pub')) }}"
+ssh_private_key_file = "{{ site_config.ssh.private_key_file | default('~/.ssh/id_rsa') }}"
+
+# Tailscale configuration
+tailscale_auth_key = "{{ lookup('env', site_config.tailscale.auth_key_env) }}"
+
+# Validated image configuration
+ubuntu_version = "{{ validated_images.ubuntu_version }}"
+ubuntu_image_path = "{{ validated_images.ubuntu_image_path }}"
+opnsense_version = "{{ validated_images.opnsense_version }}"
+opnsense_image_path = "{{ validated_images.opnsense_image_path }}"
+
+# Docker image configurations
+pangolin_image = "{{ validated_images.docker_pangolin_pangolin_latest }}"
+crowdsec_image = "{{ validated_images.docker_crowdsecurity_crowdsec_latest }}"
+crowdsec_dashboard_image = "{{ validated_images.docker_crowdsecurity_cs-dashboard_latest }}"
+postgres_image = "{{ validated_images.docker_postgres_13 }}"
+
+# VM template deployment configuration
+vm_templates:
+  opnsense:
+    enabled: true
+    start_on_deploy: true
+  omada:
+    enabled: true
+    start_on_deploy: true
+  zeek:
+    enabled: true
+    start_on_deploy: false  # Don't start Zeek by default
+  tailscale:
+    enabled: true
+    start_on_deploy: true
+  security_services:
+    enabled: true
+    start_on_deploy: true

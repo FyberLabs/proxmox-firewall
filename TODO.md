@@ -4,18 +4,34 @@
 
 - IP for proxmox needs to be dhcp to initialize then static in 10. net (implemented, needs testing)
 
+## Fixes
+
+- Insure vlan_config is in site config yml
+- answer file jinja fix
+- what is device config jinja???
+- use hostname for site config in local ansible
+- clean up the masters mess
+- cron job loader for local
+
 ## Documentation
 
 - Update README.md to mention single/multifirewall and remove specific devices, hubs, nvr, etc. as we have those as optional devices now.
 - Create some sample mermaid network diagrams showing VLANs and example devices
 
+## Features
+
+- Zabbix SNMP VM
+- Prometheus and snmp_exporter
+- Grafana
+- bsnmp for OPNSense?
+
 ## Automation
 
 - Develop the update scripts for the non-package repo VM software.
 - Setup self-running/hosted ansible in proxmox for the various maintenance scripts - reorg ansible to install/(on proxmox) post-install?
-- clean up answer file templates
+- clean up answer file templates [reference](https://pve.proxmox.com/wiki/Automated_Installation)
 - apply_hardware_config.yml needs cleaned up and some sort of loader in proxmox
-- add more missing components to site_template.yml and use it in create_site_config.sh
+- add more missing implemented components to site_template.yml and use it in create_site_config.sh
 - document new process for making ISOs and put their output somewhere better.
 - review hardware validation sanity
 

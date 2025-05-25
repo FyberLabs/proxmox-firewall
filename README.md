@@ -23,12 +23,12 @@
   cp env.example .env
   ```
 
-  Edit the .env file to set variablses for the custom proxmox iso and variables for ansible.
+  Edit the .env file to set variables for the custom proxmox iso and variables for ansible.
 
 1. **Install Prerequisites**:
 
    ```bash
-   # Clone the repository
+   # Clone your private fork of the repository
    git clone https://github.com/yourusername/proxmox-firewall.git
    cd proxmox-firewall
 
@@ -41,23 +41,15 @@
 
    ```bash
    # Download and validate latest Ubuntu and OPNsense images
-   chmod +x scripts/validate_images.sh
-   ./scripts/validate_images.sh
+   chmod +x scripts/download_latest_images.sh
+   ./scripts/download_latest_images.sh
    ```
 
-3. **Create Custom Proxmox ISO**:
-
-   ```bash
-   # Create custom Proxmox ISO with answer file
-   chmod +x scripts/create_proxmox_iso.sh
-   ./scripts/create_proxmox_iso.sh
-   ```
-
-4. **Configure Sites**:
+3. **Configure Sites**:
 
    ```bash
    # Configure each site (run for each site you want to deploy)
-   ./scripts/create_site_config.sh
+   ./deployment/scripts/create_site_config.sh
    ```
 
    This script will:
@@ -66,7 +58,7 @@
    - Set up Terraform state for the site
    - Generate appropriate .env file entries
 
-5. **Configure Devices**:
+4. **Configure Devices**:
 
    ```bash
    # Add devices for each site (run for each device)
@@ -79,13 +71,13 @@
    - Set up DHCP reservations
    - Update firewall rules
 
-6. **Customize Site and Device Configurations**:
+5. **Customize Site and Device Configurations**:
 
    - Edit site configurations in `config/<site_name>.conf`
    - Modify device configurations in `config/devices/<site_name>/`
    - Update `.env` file with credentials and MAC addresses
 
-7. **Deploy Proxmox**:
+6. **Deploy Proxmox**:
 
    ```bash
    # Write ISO to USB drive (replace sdX with your USB device)
@@ -97,20 +89,30 @@
    # - Server will reboot when complete
    ```
 
+7. **Create Custom Proxmox ISO**:
+
+   ```bash
+   # Create custom Proxmox ISO with answer file
+   ansible-playbook ansible/playbooks/create_proxmox_iso.yml
+   ```
+
+   This playbook will:
+   - Generate a custom Proxmox ISO with site/firewall specific answer files
+   - Optionally include hardware-specific configurations
+
 8. **Fetch Credentials**:
 
-The `scripts/fetch_credentials.sh` script is used to retrieve and store credentials after deployment:
+   The `scripts/fetch_credentials.sh` script is used to retrieve and store credentials after deployment:
 
-```bash
-# Fetch credentials for a specific site
-./scripts/fetch_credentials.sh <site_name>
-```
+   ```bash
+   # Fetch credentials for a specific site
+   ./scripts/fetch_credentials.sh <site_name>
+   ```
 
-This will:
-
-- Retrieve API tokens and keys from deployed systems
-- Store them securely in the credentials directory
-- Update the .env file with the retrieved values
+   This will:
+   - Retrieve API tokens and keys from deployed systems
+   - Store them securely in the credentials directory
+   - Update the .env file with the retrieved values
 
 9. **Deploy Firewall Configuration**:
 

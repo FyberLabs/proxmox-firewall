@@ -1,0 +1,12 @@
+[global]
+fsid = {{ ceph_fsid }}
+mon initial members = {{ ceph_mon_initial_members | join(',') }}
+mon host = {{ ceph_mon_host | join(',') }}
+auth cluster required = cephx
+auth service required = cephx
+auth client required = cephx
+public network = {{ ceph_public_network }}
+cluster network = {{ ceph_cluster_network }}
+
+[client.{{ ceph.user }}]
+keyring = /etc/ceph/ceph.client.{{ ceph.user }}.keyring

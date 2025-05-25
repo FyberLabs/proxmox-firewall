@@ -1,0 +1,13 @@
+---
+# Global variables for all playbooks
+# This file contains default configurations and templates
+# Site-specific configurations are stored in separate files in this directory
+# (e.g., site1.yml, site2.yml) and are created by scripts/create_site_config.sh
+
+# Site configuration template
+# Each site should have its own file (e.g., site1.yml) with this structure:
+# site_config:
+#   name: "site_name"          # Short machine-friendly name
+#   display_name: "Site Name"  # Human-readable name
+#   network_prefix: "10.1"     # Base network prefix
+#   domain: "site1.local"      # Local domain name

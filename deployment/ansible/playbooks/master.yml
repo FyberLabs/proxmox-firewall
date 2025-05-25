@@ -1,0 +1,44 @@
+---
+- name: Master Deployment Playbook
+  hosts: proxmox
+  become: true
+  vars:
+    repo_url: "{{ lookup('env', 'REPO_URL') | default('https://github.com/your-org/proxmox-firewall.git') }}"
+    repo_branch: "{{ lookup('env', 'REPO_BRANCH') | default('main') }}"
+
+  tasks:
+    - name: Include initial setup playbook
+      ansible.builtin.import_playbook: 00_configure_repos.yml
+
+    - name: Include SSH key setup playbook
+      ansible.builtin.import_playbook: 02a_update_ssh_keys.yml
+
+    - name: Include Terraform API setup playbook
+      ansible.builtin.import_playbook: 02_terraform_api.yml
+
+    - name: Include disable root password playbook
+      ansible.builtin.import_playbook: 02b_disable_root_password.yml
+
+    - name: Include network transition playbook
+      ansible.builtin.import_playbook: 03a_network_transition.yml
+
+    - name: Include network setup playbook
+      ansible.builtin.import_playbook: 03_network_setup.yml
+
+    - name: Include VM templates playbook
+      ansible.builtin.import_playbook: 04_vm_templates.yml
+
+    - name: Include VM deployment playbook
+      ansible.builtin.import_playbook: 05_deploy_vms.yml
+
+    - name: Clone repository to /opt/proxmox-firewall
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: /opt/proxmox-firewall
+        version: "{{ repo_branch }}"
+        force: true
+      register: repo_clone
+
+    - name: Set up initial local configuration
+      ansible.builtin.import_playbook: 06_initial_local_setup.yml
+      when: repo_clone.changed

@@ -1,0 +1,133 @@
+---
+# Site-specific Deployment Playbook
+# This playbook manages the post-boot deployment process for a specific site
+
+- name: Site Deployment Configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Set site name from inventory or argument
+      ansible.builtin.set_fact:
+        site_name: "{{ site | default(inventory_hostname.split('-')[0]) }}"
+      when: site is defined or '-' in inventory_hostname
+
+    - name: Display site information
+      ansible.builtin.debug:
+        msg:
+          - "Deploying configuration for site: {{ site_name }}"
+          - "Target IP: {{ ansible_host }}"
+      when: site_name is defined
+
+    - name: Fail if site name cannot be determined
+      ansible.builtin.fail:
+        msg: "Site name could not be determined. Please specify with -e 'site=your_site_name'"
+      when: site_name is not defined
+
+- name: Configure Proxmox Repositories
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Include repository configuration tasks
+      ansible.builtin.include_tasks: tasks/configure_repos.yml
+      tags: ['repos']
+
+- name: Perform Network Configuration
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Include network transition tasks
+      ansible.builtin.include_tasks: tasks/network_transition.yml
+      tags: ['network', 'transition']
+
+    - name: Include network setup tasks
+      ansible.builtin.include_tasks: tasks/network_setup.yml
+      tags: ['network']
+
+- name: Configure Terraform and VMs
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Include Terraform API setup tasks
+      ansible.builtin.include_tasks: tasks/terraform_api.yml
+      tags: ['api', 'terraform']
+
+    - name: Include VM template tasks
+      ansible.builtin.include_tasks: tasks/vm_templates.yml
+      tags: ['templates', 'vm']
+
+    - name: Include VM deployment tasks
+      ansible.builtin.include_tasks: tasks/deploy_vms.yml
+      tags: ['deploy', 'vm']
+
+- name: Configure Firewall and Security
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Include OPNsense setup tasks
+      ansible.builtin.include_tasks: tasks/opnsense_setup.yml
+      when: "'opnsense' in groups and site_name + '-opnsense' in groups['opnsense']"
+      tags: ['opnsense', 'firewall']
+
+    - name: Include Tailscale integration tasks
+      ansible.builtin.include_tasks: tasks/opnsense_tailscale.yml
+      when: "'opnsense' in groups and site_name + '-opnsense' in groups['opnsense']"
+      tags: ['opnsense', 'tailscale', 'network']
+
+    - name: Include Suricata IDS/IPS tasks
+      ansible.builtin.include_tasks: tasks/opnsense_suricata.yml
+      when: "'opnsense' in groups and site_name + '-opnsense' in groups['opnsense']"
+      tags: ['security', 'suricata']
+
+    - name: Include Zeek network monitoring tasks
+      ansible.builtin.include_tasks: tasks/zeek_setup.yml
+      when: "'zeek' in groups and site_name + '-zeek' in groups['zeek']"
+      tags: ['security', 'zeek']
+
+- name: Setup Local Environment
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Include local setup tasks
+      ansible.builtin.include_tasks: tasks/initial_local_setup.yml
+      tags: ['local', 'setup']
+
+    - name: Clone repository to local path
+      ansible.builtin.git:
+        repo: "{{ repo_url | default('https://github.com/your-org/proxmox-firewall.git') }}"
+        dest: /opt/proxmox-firewall
+        version: "{{ repo_branch | default('main') }}"
+        force: true
+      register: repo_clone
+      tags: ['local', 'setup']
+
+    - name: Set up local cron jobs
+      ansible.builtin.include_tasks: tasks/setup_local_cron.yml
+      tags: ['local', 'cron']
+
+- name: Deployment Summary
+  hosts: localhost
+  gather_facts: false
+  vars:
+    site_name: "{{ site | default(groups['all'][0].split('-')[0]) }}"
+  tasks:
+    - name: Load site configuration
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../group_vars/{{ site_name }}.yml"
+        name: site_vars
+      tags: ['always']
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "==================================================="
+          - "Deployment Complete for Site: {{ site_name }}"
+          - "==================================================="
+          - "Site network prefix: {{ site_vars.site_config.network_prefix | default('10.x') }}"
+          - "Main services deployed:"
+          - "  - OPNsense firewall: {{ site_vars.site_config.network_prefix | default('10.x') }}.50.1"
+          - "  - Proxmox Management: {{ site_vars.site_config.network_prefix | default('10.x') }}.50.10"
+          - "Security URLs (if configured):"
+          - "  - OPNsense Suricata: https://{{ site_vars.site_config.network_prefix | default('10.x') }}.50.1/ui/ids"
+          - "  - OPNsense Tailscale: https://{{ site_vars.site_config.network_prefix | default('10.x') }}.50.1/ui/tailscale"
+          - "==================================================="
+      tags: ['always']

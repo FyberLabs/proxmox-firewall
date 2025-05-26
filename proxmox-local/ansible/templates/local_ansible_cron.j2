@@ -1,0 +1,8 @@
+# Ansible managed: {{ ansible_managed }}
+# Local Ansible maintenance tasks for Proxmox Firewall
+
+# Run main maintenance tasks daily at 3 AM
+0 3 * * * root /opt/proxmox-firewall/scripts/ansible_loader.sh
+
+# Run backup verification weekly on Saturdays at 4 AM
+0 4 * * 6 root /opt/proxmox-firewall/ansible/playbooks/verify_backups.yml -e "site_name={{ site_config.name }}" >> /var/log/proxmox-firewall/backup_verify.log 2>&1

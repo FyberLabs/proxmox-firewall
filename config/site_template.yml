@@ -1,11 +1,17 @@
 # Site Configuration Template
 # Copy this file to sites/your-site-name.yml and customize for your site
 # This is the single source of truth for your site - no other config files needed!
+#
+# IMPORTANT: Replace "10.x" throughout this file with your actual network prefix
+# Examples:
+#   - For 192.168.x.x networks: change "10.x" to "192.168"
+#   - For 10.1.x.x networks: change "10.x" to "10.1"
+#   - For 172.16.x.x networks: change "10.x" to "172.16"
 
 site:
   name: "your-site-name"           # Short name (lowercase, no spaces)
   display_name: "Your Site Name"   # Human-readable name
-  network_prefix: "192.168"        # First two octets of your network (e.g., 192.168, 10.1)
+  network_prefix: "10.x"           # First two octets of your network - use "10.x" as placeholder, replace with actual like "10.1", "192.168", etc.
   domain: "yoursite.local"         # Local domain name
 
   # Hardware Configuration
@@ -53,29 +59,29 @@ site:
       vlans:                       # VLAN definitions
         - id: 10
           name: "main"
-          subnet: "192.168.10.0/24"  # Update with your network_prefix
+          subnet: "10.x.10.0/24"     # Replace 10.x with your network_prefix
           dhcp: true
-          gateway: "192.168.10.1"    # Update with your network_prefix
+          gateway: "10.x.10.1"       # Replace 10.x with your network_prefix
         - id: 20
           name: "cameras"
-          subnet: "192.168.20.0/24"  # Update with your network_prefix
+          subnet: "10.x.20.0/24"     # Replace 10.x with your network_prefix
           dhcp: true
-          gateway: "192.168.20.1"    # Update with your network_prefix
+          gateway: "10.x.20.1"       # Replace 10.x with your network_prefix
         - id: 30
           name: "iot"
-          subnet: "192.168.30.0/24"  # Update with your network_prefix
+          subnet: "10.x.30.0/24"     # Replace 10.x with your network_prefix
           dhcp: true
-          gateway: "192.168.30.1"    # Update with your network_prefix
+          gateway: "10.x.30.1"       # Replace 10.x with your network_prefix
         - id: 40
           name: "guest"
-          subnet: "192.168.40.0/24"  # Update with your network_prefix
+          subnet: "10.x.40.0/24"     # Replace 10.x with your network_prefix
           dhcp: true
-          gateway: "192.168.40.1"    # Update with your network_prefix
+          gateway: "10.x.40.1"       # Replace 10.x with your network_prefix
         - id: 50
           name: "management"
-          subnet: "192.168.50.0/24"  # Update with your network_prefix
+          subnet: "10.x.50.0/24"     # Replace 10.x with your network_prefix
           dhcp: true
-          gateway: "192.168.50.1"    # Update with your network_prefix
+          gateway: "10.x.50.1"       # Replace 10.x with your network_prefix
 
       bridges:                     # Proxmox bridge definitions
         - name: "vmbr0"
@@ -95,7 +101,7 @@ site:
 
   # Proxmox Configuration
   proxmox:
-    host: "192.168.1.100"          # IP address or hostname of your Proxmox server
+    host: "10.x.1.100"             # IP address or hostname of your Proxmox server (replace 10.x with your network_prefix)
     node_name: "pve"               # Proxmox node name
     storage_pool: "local-lvm"      # Storage pool for VMs
     template_storage: "local"      # Storage for VM templates
@@ -164,16 +170,16 @@ site:
       default_policy: "deny"       # Default deny all traffic
       rules:                       # Custom firewall rules
         - name: "Allow LAN to WAN"
-          source: "192.168.10.0/24"  # Update with your network_prefix
+          source: "10.x.10.0/24"     # Replace 10.x with your network_prefix
           destination: "any"
           action: "allow"
         - name: "Block IoT to LAN"
-          source: "192.168.30.0/24"  # Update with your network_prefix
-          destination: "192.168.10.0/24"  # Update with your network_prefix
+          source: "10.x.30.0/24"     # Replace 10.x with your network_prefix
+          destination: "10.x.10.0/24"  # Replace 10.x with your network_prefix
           action: "deny"
         - name: "Allow Guest Internet Only"
-          source: "192.168.40.0/24"  # Update with your network_prefix
-          destination: "!192.168.0.0/16"  # Update with your network_prefix
+          source: "10.x.40.0/24"     # Replace 10.x with your network_prefix
+          destination: "!10.x.0.0/16"  # Replace 10.x with your network_prefix (block access to local network)
           action: "allow"
 
     suricata:                      # Intrusion detection system

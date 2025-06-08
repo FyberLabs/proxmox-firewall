@@ -9,9 +9,11 @@ resource "proxmox_vm_qemu" "security_services" {
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
 
-  cores    = 4
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 4
+    sockets = 1
+    type    = "host"
+  }
   memory   = 4096
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
@@ -25,6 +27,7 @@ resource "proxmox_vm_qemu" "security_services" {
 
   # Network interface on Management VLAN
   network {
+    id       = 0
     model    = "virtio"
     bridge   = "vmbr0"
     tag      = 50
@@ -34,7 +37,8 @@ resource "proxmox_vm_qemu" "security_services" {
 
   # Disk configuration
   disk {
-    type         = "virtio"
+    slot         = "virtio0"
+    type         = "disk"
     storage      = var.proxmox_storage
     size         = "20G"
     backup       = true
@@ -253,8 +257,4 @@ resource "proxmox_vm_qemu" "security_services" {
   }
 }
 
-# Output the security services VM's IP
-output "security_services_ip" {
-  value = var.enabled ? proxmox_vm_qemu.security_services[0].default_ipv4_address : null
-  description = "IP address of the security services VM"
-}
+# Outputs are defined in outputs.tf

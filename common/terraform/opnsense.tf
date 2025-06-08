@@ -6,40 +6,46 @@ resource "proxmox_vm_qemu" "opnsense" {
   clone       = "template-freebsd-opnsense"
   os_type     = "other"
 
-  cores    = 4
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 4
+    sockets = 1
+    type    = "host"
+  }
   memory   = 6144
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
 
   disk {
-    slot    = 0
+    slot    = "virtio0"
     size    = "64G"
-    type    = "virtio"
+    type    = "disk"
     storage = "local-lvm"
   }
 
   # LAN (vmbr0)
   network {
+    id     = 0
     model  = "virtio"
     bridge = "vmbr0"
   }
 
   # WAN - Fiber (vmbr1)
   network {
+    id     = 1
     model  = "virtio"
     bridge = "vmbr1"
   }
 
   # Cameras (vmbr2)
   network {
+    id     = 2
     model  = "virtio"
     bridge = "vmbr2"
   }
 
   # WAN - Starlink (vmbr3)
   network {
+    id     = 3
     model  = "virtio"
     bridge = "vmbr3"
   }
@@ -57,5 +63,5 @@ resource "proxmox_vm_qemu" "opnsense" {
 
   # VM settings
   onboot = true
-  oncreate = var.vm_templates["opnsense"].start_on_deploy
+  # Note: start_on_deploy is handled by onboot setting
 }

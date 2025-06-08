@@ -9,9 +9,11 @@ resource "proxmox_vm_qemu" "netbird_router" {
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
 
-  cores    = 1
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 1
+    sockets = 1
+    type    = "host"
+  }
   memory   = 512
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
@@ -25,6 +27,7 @@ resource "proxmox_vm_qemu" "netbird_router" {
 
   # Network interface on Management VLAN
   network {
+    id       = 0
     model    = "virtio"
     bridge   = "vmbr0"
     tag      = 50
@@ -34,7 +37,8 @@ resource "proxmox_vm_qemu" "netbird_router" {
 
   # Disk configuration
   disk {
-    type         = "virtio"
+    slot         = "virtio0"
+    type         = "disk"
     storage      = var.proxmox_storage
     size         = "5G"
     backup       = true
@@ -129,8 +133,4 @@ resource "proxmox_vm_qemu" "netbird_router" {
   }
 }
 
-# Output the Netbird router's IP
-output "netbird_router_ip" {
-  value = var.enabled ? proxmox_vm_qemu.netbird_router[0].default_ipv4_address : null
-  description = "IP address of the Netbird router VM"
-}
+# Outputs are defined in outputs.tf

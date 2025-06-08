@@ -8,9 +8,11 @@ resource "proxmox_vm_qemu" "tailscale" {
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
 
-  cores    = 1
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 1
+    sockets = 1
+    type    = "host"
+  }
   memory   = 512
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
@@ -24,6 +26,7 @@ resource "proxmox_vm_qemu" "tailscale" {
 
   # Network interface on VLAN50
   network {
+    id       = 0
     model    = "virtio"
     bridge   = "vmbr0"
     tag      = 50
@@ -33,7 +36,8 @@ resource "proxmox_vm_qemu" "tailscale" {
 
   # Disk configuration
   disk {
-    type         = "virtio"
+    slot         = "virtio0"
+    type         = "disk"
     storage      = var.proxmox_storage
     size         = "5G"
     backup       = true
@@ -86,7 +90,7 @@ resource "proxmox_vm_qemu" "tailscale" {
     }
   }
 
-  oncreate = var.vm_templates["tailscale"].start_on_deploy
+  # Note: start_on_deploy is handled by onboot setting
 
   # Install and configure Tailscale
   provisioner "remote-exec" {

@@ -9,6 +9,6 @@ output "security_services_name" {
 }
 
 output "security_services_status" {
-  value       = var.enabled ? proxmox_vm_qemu.security_services[0].status : null
-  description = "Status of the security services VM"
+  value       = var.enabled ? proxmox_vm_qemu.security_services[0].startup : null
+  description = "Startup configuration of the security services VM"
 }

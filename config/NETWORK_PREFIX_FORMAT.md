@@ -46,4 +46,4 @@ The test suite validates that:
 ❌ **Wrong**: Using `"10.x"` literally in production configs
 ❌ **Wrong**: Forgetting to update firewall rules and Proxmox host IPs
 
-✅ **Correct**: Consistent prefix throughout the entire configuration file 
+✅ **Correct**: Consistent prefix throughout the entire configuration file

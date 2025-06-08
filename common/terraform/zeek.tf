@@ -8,8 +8,11 @@ resource "proxmox_vm_qemu" "zeek" {
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
 
-  cores       = 2
-  sockets     = 1
+  cpu {
+    cores   = 2
+    sockets = 1
+    type    = "host"
+  }
   memory      = 4096
   agent       = 1
 
@@ -21,6 +24,7 @@ resource "proxmox_vm_qemu" "zeek" {
   # Network interfaces:
   # First interface: Management (on VLAN50)
   network {
+    id       = 0
     model    = "virtio"
     bridge   = "vmbr0"
     tag      = 50
@@ -28,6 +32,7 @@ resource "proxmox_vm_qemu" "zeek" {
 
   # Second interface: Monitor WAN (in promiscuous mode) - connect to vmbr1
   network {
+    id       = 1
     model    = "virtio"
     bridge   = "vmbr1"
     firewall = false
@@ -35,6 +40,7 @@ resource "proxmox_vm_qemu" "zeek" {
 
   # Third interface: Monitor Starlink WAN (in promiscuous mode) - connect to vmbr3
   network {
+    id       = 2
     model    = "virtio"
     bridge   = "vmbr3"
     firewall = false
@@ -65,7 +71,8 @@ resource "proxmox_vm_qemu" "zeek" {
 
   # Disk configuration
   disk {
-    type         = "virtio"
+    slot         = "virtio0"
+    type         = "disk"
     storage      = var.proxmox_storage
     size         = "50G"
     backup       = true
@@ -73,7 +80,7 @@ resource "proxmox_vm_qemu" "zeek" {
 
   # VM settings
   onboot = true
-  oncreate = var.vm_templates["zeek"].start_on_deploy
+  # Note: start_on_deploy is handled by onboot setting
 
   lifecycle {
     ignore_changes = [

@@ -9,6 +9,6 @@ output "netbird_router_name" {
 }
 
 output "netbird_router_status" {
-  value       = var.enabled ? proxmox_vm_qemu.netbird_router[0].status : null
-  description = "Status of the Netbird router VM"
+  value       = var.enabled ? proxmox_vm_qemu.netbird_router[0].startup : null
+  description = "Startup configuration of the Netbird router VM"
 }

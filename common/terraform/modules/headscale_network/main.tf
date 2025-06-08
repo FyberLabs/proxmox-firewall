@@ -9,9 +9,11 @@ resource "proxmox_vm_qemu" "headscale_server" {
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
 
-  cores    = 2
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 2
+    sockets = 1
+    type    = "host"
+  }
   memory   = 2048
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
@@ -25,6 +27,7 @@ resource "proxmox_vm_qemu" "headscale_server" {
 
   # Network interface on Management VLAN
   network {
+    id       = 0
     model    = "virtio"
     bridge   = "vmbr0"
     tag      = 50
@@ -34,7 +37,8 @@ resource "proxmox_vm_qemu" "headscale_server" {
 
   # Disk configuration
   disk {
-    type         = "virtio"
+    slot         = "virtio0"
+    type         = "disk"
     storage      = var.proxmox_storage
     size         = "10G"
     backup       = true
@@ -54,8 +58,8 @@ resource "proxmox_vm_qemu" "headscale_server" {
       UBUNTU_VERSION=$(lsb_release -cs)
 
       # Install Headscale
-      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_VERSION}.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_VERSION}.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$${UBUNTU_VERSION}.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$${UBUNTU_VERSION}.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list
       sudo apt-get update
       sudo apt-get install -y headscale
 
@@ -177,8 +181,4 @@ resource "proxmox_vm_qemu" "headscale_server" {
   }
 }
 
-# Output the Headscale server's IP
-output "headscale_server_ip" {
-  value = var.enabled ? proxmox_vm_qemu.headscale_server[0].default_ipv4_address : null
-  description = "IP address of the Headscale server VM"
-}
+# Outputs are defined in outputs.tf

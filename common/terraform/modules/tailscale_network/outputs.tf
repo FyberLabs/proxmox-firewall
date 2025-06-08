@@ -9,6 +9,6 @@ output "tailscale_router_name" {
 }
 
 output "tailscale_router_status" {
-  value       = var.enabled ? proxmox_vm_qemu.tailscale_router[0].status : null
-  description = "Status of the Tailscale router VM"
+  value       = var.enabled ? proxmox_vm_qemu.tailscale_router[0].startup : null
+  description = "Startup configuration of the Tailscale router VM"
 }

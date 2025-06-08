@@ -6,21 +6,24 @@ resource "proxmox_vm_qemu" "omada_controller" {
   clone       = "9001"  # ID of the Ubuntu template
   os_type     = "cloud-init"
 
-  cores    = 2
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 2
+    sockets = 1
+    type    = "host"
+  }
   memory   = 2048
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
 
   disk {
-    slot    = 0
+    slot    = "virtio0"
     size    = "10G"
-    type    = "virtio"
+    type    = "disk"
     storage = "local-lvm"
   }
 
   network {
+    id     = 0
     model  = "virtio"
     bridge = "vmbr0"
     tag    = 50  # VLAN 50 for Management
@@ -37,7 +40,7 @@ resource "proxmox_vm_qemu" "omada_controller" {
   # VM settings
   agent   = 1
   onboot  = true
-  oncreate = var.vm_templates["omada"].start_on_deploy
+  # Note: start_on_deploy is handled by onboot setting
 
   # Cloud-init provisioning script
   provisioner "file" {

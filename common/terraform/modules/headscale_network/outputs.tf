@@ -9,6 +9,6 @@ output "headscale_server_name" {
 }
 
 output "headscale_server_status" {
-  value       = var.enabled ? proxmox_vm_qemu.headscale_server[0].status : null
-  description = "Status of the Headscale server VM"
+  value       = var.enabled ? proxmox_vm_qemu.headscale_server[0].startup : null
+  description = "Startup configuration of the Headscale server VM"
 }

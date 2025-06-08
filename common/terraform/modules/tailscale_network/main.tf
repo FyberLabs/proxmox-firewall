@@ -9,9 +9,11 @@ resource "proxmox_vm_qemu" "tailscale_router" {
   clone       = var.ubuntu_template_id
   os_type     = "cloud-init"
 
-  cores    = 1
-  sockets  = 1
-  cpu      = "host"
+  cpu {
+    cores   = 1
+    sockets = 1
+    type    = "host"
+  }
   memory   = 512
   scsihw   = "virtio-scsi-pci"
   bootdisk = "virtio0"
@@ -25,6 +27,7 @@ resource "proxmox_vm_qemu" "tailscale_router" {
 
   # Network interface on Management VLAN
   network {
+    id       = 0
     model    = "virtio"
     bridge   = "vmbr0"
     tag      = 50
@@ -34,7 +37,8 @@ resource "proxmox_vm_qemu" "tailscale_router" {
 
   # Disk configuration
   disk {
-    type         = "virtio"
+    slot         = "virtio0"
+    type         = "disk"
     storage      = var.proxmox_storage
     size         = "5G"
     backup       = true
@@ -131,8 +135,4 @@ resource "proxmox_vm_qemu" "tailscale_router" {
   }
 }
 
-# Output the Tailscale router's IP
-output "tailscale_router_ip" {
-  value = var.enabled ? proxmox_vm_qemu.tailscale_router[0].default_ipv4_address : null
-  description = "IP address of the Tailscale router VM"
-}
+# Outputs are defined in outputs.tf

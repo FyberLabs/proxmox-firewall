@@ -269,76 +269,8 @@ EOL
     # Create site directory for terraform state
     mkdir -p "${TERRAFORM_STATES_DIR}/${site_name}"
 
-    # Create minimal Ansible group vars (references external config)
-    cat > "${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml" <<EOL
----
-# Ansible variables for ${site_display_name}
-# Main configuration is in config/${site_name}.conf (external to Ansible)
-# This file only contains Ansible-specific orchestration settings
-
-site_config:
-  # Basic site identification (loaded from external config)
-  name: "${site_name}"
-  display_name: "${site_display_name}"
-
-  # External config file reference
-  external_config_file: "{{ playbook_dir }}/../config/${site_name}.conf"
-
-  # Ansible-specific settings
-  proxmox:
-    api_secret_env: "${site_name^^}_PROXMOX_API_SECRET"
-    node_name: "pve"
-
-  ssh:
-    public_key_file: "{{ playbook_dir }}/../credentials/${site_name}_root.pub"
-    private_key_file: "{{ lookup('env', 'ANSIBLE_SSH_PRIVATE_KEY_FILE') | default('~/.ssh/id_rsa') }}"
-
-  tailscale:
-    auth_key_env: "TAILSCALE_AUTH_KEY"
-
-  # VM template defaults (can be overridden in external config)
-  vm_templates:
-    opnsense:
-      enabled: true
-      start_on_deploy: true
-      cores: 4
-      memory: 8192
-      disk_size: "32G"
-      network:
-        - bridge: "vmbr0"  # WAN
-        - bridge: "vmbr1"  # LAN
-        - bridge: "vmbr2"  # Cameras
-        - bridge: "vmbr3"  # WAN Backup
-    tailscale:
-      enabled: true
-      start_on_deploy: true
-      cores: 1
-      memory: 1024
-      disk_size: "8G"
-      network:
-        - bridge: "vmbr1"
-          vlan: 50  # Management VLAN
-    zeek:
-      enabled: true
-      start_on_deploy: false
-      cores: 4
-      memory: 8192
-      disk_size: "100G"
-      network:
-        - bridge: "vmbr1"
-          vlan: 50  # Management VLAN
-        - bridge: "vmbr0"  # WAN monitoring
-          promiscuous: true
-    homeassistant:
-      enabled: false
-      start_on_deploy: false
-      cores: 2
-      memory: 4096
-      disk_size: "32G"
-      network:
-        - bridge: "vmbr1"
-          vlan: 10  # Main LAN
-EOL
+    # Note: With simplified approach, Ansible reads the site YAML directly
+    # No need for separate group vars - everything is in the site YAML file
 
     # Add entries to the master hosts.yml if it exists
     if [ -f "${SCRIPT_DIR}/ansible/inventory/hosts.yml" ]; then
@@ -379,7 +311,7 @@ EOL
 # Proxmox API credentials
 ${site_name^^}_PROXMOX_API_SECRET=""
 
-# Site configuration (loaded from config/${site_name}.conf by Ansible)
+# Site configuration (loaded from config/sites/${site_name}.yml by Ansible)
 ${site_name^^}_NETWORK_PREFIX="${network_prefix}"
 ${site_name^^}_DOMAIN="${domain}"
 ${site_name^^}_PROXMOX_HOST="${proxmox_host}"

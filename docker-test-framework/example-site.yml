@@ -1,5 +1,6 @@
 site:
   name: "example-site"
+  display_name: "Example Test Site"
   network_prefix: "10.99"
   domain: "example.local"
 

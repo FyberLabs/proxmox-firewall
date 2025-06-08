@@ -1,0 +1,27 @@
+---
+- name: Test Site Configuration Loading
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    site_config_file: "example-site.yml"
+  
+  tasks:
+    - name: Load site configuration
+      include_vars:
+        file: "{{ site_config_file }}"
+        name: site_config
+      
+    - name: Validate site configuration structure
+      assert:
+        that:
+          - site_config.site is defined
+          - site_config.site.name is defined
+          - site_config.site.display_name is defined
+          - site_config.site.proxmox is defined
+          - site_config.site.vm_templates is defined
+        msg: "Site configuration is missing required sections"
+    
+    - name: Display loaded configuration
+      debug:
+        msg: "Successfully loaded configuration for site: {{ site_config.site.display_name }}" 

@@ -1,0 +1,92 @@
+---
+# System Health Verification Tasks
+# These tasks check the health of a Proxmox system
+
+- name: Check disk space
+  ansible.builtin.shell: set -o pipefail && df -h | grep -vE '^(tmpfs|udev|/dev/loop)'
+  args:
+    executable: /bin/bash
+  register: disk_space
+  changed_when: false
+
+- name: Check for low disk space
+  ansible.builtin.set_fact:
+    low_disk_warning: true
+  when: disk_space.stdout is regex('9[0-9]%|100%')
+
+- name: Alert on low disk space
+  ansible.builtin.debug:
+    msg: "WARNING: Low disk space detected on one or more filesystems"
+  when: low_disk_warning | default(false)
+
+- name: Check system load
+  ansible.builtin.shell: cat /proc/loadavg
+  args:
+    executable: /bin/bash
+  register: system_load
+  changed_when: false
+
+- name: Parse load average
+  ansible.builtin.set_fact:
+    load_1min: "{{ system_load.stdout.split(' ')[0] | float }}"
+    load_5min: "{{ system_load.stdout.split(' ')[1] | float }}"
+    load_15min: "{{ system_load.stdout.split(' ')[2] | float }}"
+    cpu_count: "{{ ansible_processor_vcpus | default(ansible_processor_count) }}"
+
+- name: Check for high load
+  ansible.builtin.set_fact:
+    high_load_warning: true
+  when: load_5min | float > (cpu_count | int * 0.8)
+
+- name: Alert on high system load
+  ansible.builtin.debug:
+    msg: "WARNING: High system load detected ({{ load_5min }} > {{ cpu_count | int * 0.8 }})"
+  when: high_load_warning | default(false)
+
+- name: Check Proxmox service status
+  ansible.builtin.shell: systemctl status pve* | grep Active
+  args:
+    executable: /bin/bash
+  register: pve_services
+  changed_when: false
+  ignore_errors: true
+
+- name: Alert on Proxmox service issues
+  ansible.builtin.debug:
+    msg: "WARNING: Proxmox service issues detected:\n{{ pve_services.stdout }}"
+  when: pve_services.rc != 0 or pve_services.stdout is regex('(inactive|failed)')
+
+- name: Check VM status
+  ansible.builtin.shell: set -o pipefail && qm list | grep -v QEMU
+  args:
+    executable: /bin/bash
+  register: vm_status
+  changed_when: false
+
+- name: Log VM status
+  ansible.builtin.debug:
+    msg: "VM Status:\n{{ vm_status.stdout }}"
+    verbosity: 1
+
+- name: Generate system health report
+  ansible.builtin.copy:
+    content: |
+      System Health Report for {{ site_config.name | default('unknown') }}
+      Generated: {{ ansible_date_time.iso8601 }}
+
+      === Disk Space ===
+      {{ disk_space.stdout }}
+
+      === System Load ===
+      1 min: {{ load_1min }}
+      5 min: {{ load_5min }}
+      15 min: {{ load_15min }}
+      CPU Count: {{ cpu_count }}
+
+      === Proxmox Services ===
+      {{ pve_services.stdout }}
+
+      === Virtual Machines ===
+      {{ vm_status.stdout }}
+    dest: "/var/log/proxmox-firewall/health_{{ ansible_date_time.date }}.log"
+    mode: '0644'

@@ -1,0 +1,251 @@
+version: '3.8'
+
+services:
+  # Proxmox VE API Mock Service
+  proxmox-mock:
+    build:
+      context: ../proxmox-mock
+      dockerfile: Dockerfile
+    container_name: proxmox-mock
+    ports:
+      - "8006:8006"
+    environment:
+      - PROXMOX_MOCK_PORT=8006
+      - PROXMOX_MOCK_API_VERSION=v2
+      - PROXMOX_MOCK_DEBUG=${TEST_DEBUG:-false}
+      - PROXMOX_MOCK_NODES=${TEST_PROXMOX_NODES:-pve}
+      - PROXMOX_MOCK_STORAGE=${TEST_PROXMOX_STORAGE:-local-lvm}
+    volumes:
+      - proxmox-data:/var/lib/proxmox-mock
+      - ../configs:/etc/proxmox-mock/configs:ro
+      - test-keys:/test-keys:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/api2/json/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # OPNsense API Mock Service
+  opnsense-mock:
+    build:
+      context: ../opnsense-mock
+      dockerfile: Dockerfile
+    container_name: opnsense-mock
+    ports:
+      - "8443:443"
+    environment:
+      - OPNSENSE_MOCK_PORT=443
+      - OPNSENSE_MOCK_API_VERSION=v1
+      - OPNSENSE_MOCK_DEBUG=${TEST_DEBUG:-false}
+      - OPNSENSE_MOCK_INTERFACES=${TEST_OPNSENSE_INTERFACES:-lan,wan,opt1,opt2}
+    volumes:
+      - opnsense-data:/var/lib/opnsense-mock
+      - ../configs:/etc/opnsense-mock/configs:ro
+      - test-keys:/test-keys:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/api/core/firmware/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Network Topology Simulator
+  network-sim:
+    build:
+      context: ../network-sim
+      dockerfile: Dockerfile
+    container_name: network-sim
+    privileged: true
+    environment:
+      - NETWORK_SIM_DEBUG=${TEST_DEBUG:-false}
+      - VLAN_RANGE_START=${VLAN_RANGE_START:-10}
+      - VLAN_RANGE_END=${VLAN_RANGE_END:-50}
+      - NETWORK_BRIDGE_PREFIX=${NETWORK_BRIDGE_PREFIX:-test-br}
+    volumes:
+      - ../configs:/etc/network-sim/configs:ro
+      - network-sim-data:/var/lib/network-sim
+    networks:
+      - test-network
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    restart: unless-stopped
+
+  # Test Runner and Orchestrator
+  test-runner:
+    build:
+      context: ../test-runner
+      dockerfile: Dockerfile
+    container_name: test-runner
+    environment:
+      - TEST_DEBUG=${TEST_DEBUG:-false}
+      - TEST_SUITE=${TEST_SUITE:-all}
+      - TEST_PARALLEL=${TEST_PARALLEL:-true}
+      - PROXMOX_MOCK_HOST=proxmox-mock
+      - PROXMOX_MOCK_PORT=8006
+      - OPNSENSE_MOCK_HOST=opnsense-mock
+      - OPNSENSE_MOCK_PORT=443
+      - NETWORK_SIM_HOST=network-sim
+      - TEST_SITE_PREFIX=${TEST_SITE_PREFIX:-10.100}
+      - TEST_DOMAIN=${TEST_DOMAIN:-test.local}
+      - ANSIBLE_SSH_PRIVATE_KEY_FILE=/test-keys/id_rsa
+      - TERRAFORM_WORKSPACE=${TERRAFORM_WORKSPACE:-test}
+    volumes:
+      - ../tests:/tests
+      - ../configs:/configs
+      - ../scripts:/scripts
+      - test-keys:/test-keys
+      - test-reports:/reports
+      - terraform-state:/terraform-state
+      - ansible-cache:/ansible-cache
+      - ../../:/workspace:ro  # Mount the main project as read-only
+    networks:
+      - test-network
+    depends_on:
+      proxmox-mock:
+        condition: service_healthy
+      opnsense-mock:
+        condition: service_healthy
+      network-sim:
+        condition: service_started
+    restart: "no"  # Don't restart test runner automatically
+
+  # Redis for caching and coordination
+  redis:
+    image: redis:7-alpine
+    container_name: test-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - test-network
+    restart: unless-stopped
+
+  # PostgreSQL for test data and state
+  postgres:
+    image: postgres:15-alpine
+    container_name: test-postgres
+    environment:
+      - POSTGRES_DB=test_db
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../configs/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - test-network
+    restart: unless-stopped
+
+  # Monitoring and Metrics (Prometheus)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: test-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - test-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: test-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../configs/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../configs/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - test-network
+    restart: unless-stopped
+
+  # Log aggregation with ELK stack
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: test-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - test-network
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: test-logstash
+    volumes:
+      - ../configs/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    ports:
+      - "5044:5044"
+    networks:
+      - test-network
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: test-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - test-network
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+networks:
+  test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+
+volumes:
+  proxmox-data:
+    driver: local
+  opnsense-data:
+    driver: local
+  network-sim-data:
+    driver: local
+  test-keys:
+    driver: local
+  test-reports:
+    driver: local
+  terraform-state:
+    driver: local
+  ansible-cache:
+    driver: local
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  elasticsearch-data:
+    driver: local

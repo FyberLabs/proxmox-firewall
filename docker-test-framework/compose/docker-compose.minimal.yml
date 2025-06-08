@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  # Proxmox VE API Mock Service
+  proxmox-mock:
+    build:
+      context: ../proxmox-mock
+      dockerfile: Dockerfile
+    container_name: proxmox-mock
+    ports:
+      - "8006:8006"
+    environment:
+      - PROXMOX_MOCK_PORT=8006
+      - PROXMOX_MOCK_API_VERSION=v2
+      - PROXMOX_MOCK_DEBUG=${TEST_DEBUG:-false}
+      - PROXMOX_MOCK_NODES=${TEST_PROXMOX_NODES:-pve}
+      - PROXMOX_MOCK_STORAGE=${TEST_PROXMOX_STORAGE:-local-lvm}
+    volumes:
+      - proxmox-data:/var/lib/proxmox-mock
+      - test-keys:/test-keys:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # OPNsense API Mock Service
+  opnsense-mock:
+    build:
+      context: ../opnsense-mock
+      dockerfile: Dockerfile
+    container_name: opnsense-mock
+    ports:
+      - "8443:443"
+    environment:
+      - OPNSENSE_MOCK_PORT=443
+      - OPNSENSE_MOCK_API_VERSION=v1
+      - OPNSENSE_MOCK_DEBUG=${TEST_DEBUG:-false}
+      - OPNSENSE_MOCK_INTERFACES=${TEST_OPNSENSE_INTERFACES:-lan,wan,opt1,opt2}
+    volumes:
+      - opnsense-data:/var/lib/opnsense-mock
+      - test-keys:/test-keys:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Network Topology Simulator
+  network-sim:
+    build:
+      context: ../network-sim
+      dockerfile: Dockerfile
+    container_name: network-sim
+    privileged: true
+    environment:
+      - NETWORK_SIM_DEBUG=${TEST_DEBUG:-false}
+      - VLAN_RANGE_START=${VLAN_RANGE_START:-10}
+      - VLAN_RANGE_END=${VLAN_RANGE_END:-50}
+      - NETWORK_BRIDGE_PREFIX=${NETWORK_BRIDGE_PREFIX:-test-br}
+    volumes:
+      - network-sim-data:/var/lib/network-sim
+    networks:
+      - test-network
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    restart: unless-stopped
+
+  # Test Runner and Orchestrator
+  test-runner:
+    build:
+      context: ../test-runner
+      dockerfile: Dockerfile
+    container_name: test-runner
+    environment:
+      - TEST_DEBUG=${TEST_DEBUG:-false}
+      - TEST_SUITE=${TEST_SUITE:-all}
+      - TEST_PARALLEL=${TEST_PARALLEL:-true}
+      - PROXMOX_MOCK_HOST=proxmox-mock
+      - PROXMOX_MOCK_PORT=8006
+      - OPNSENSE_MOCK_HOST=opnsense-mock
+      - OPNSENSE_MOCK_PORT=443
+      - NETWORK_SIM_HOST=network-sim
+      - TEST_SITE_PREFIX=${TEST_SITE_PREFIX:-10.100}
+      - TEST_DOMAIN=${TEST_DOMAIN:-test.local}
+      - ANSIBLE_SSH_PRIVATE_KEY_FILE=/test-keys/id_rsa
+      - TERRAFORM_WORKSPACE=${TERRAFORM_WORKSPACE:-test}
+    volumes:
+      - ../tests:/tests
+      - ../configs:/configs
+      - ../scripts:/scripts
+      - test-keys:/test-keys
+      - test-reports:/reports
+      - terraform-state:/terraform-state
+      - ansible-cache:/ansible-cache
+      - ../../:/workspace:ro  # Mount the main project as read-only
+    networks:
+      - test-network
+    depends_on:
+      proxmox-mock:
+        condition: service_healthy
+      opnsense-mock:
+        condition: service_healthy
+      network-sim:
+        condition: service_started
+    restart: "no"  # Don't restart test runner automatically
+
+networks:
+  test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+
+volumes:
+  proxmox-data:
+    driver: local
+  opnsense-data:
+    driver: local
+  network-sim-data:
+    driver: local
+  test-keys:
+    driver: local
+  test-reports:
+    driver: local
+  terraform-state:
+    driver: local
+  ansible-cache:
+    driver: local

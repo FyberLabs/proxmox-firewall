@@ -9,9 +9,9 @@
 - Insure vlan_config is in site config yml
 - answer file jinja fix
 - what is device config jinja???
-- use hostname for site config in local ansible
-- clean up the masters mess
-- cron job loader for local
+- use hostname for site config in local ansible (✓ implemented)
+- clean up the masters mess (✓ implemented)
+- cron job loader for local (✓ implemented)
 
 ## Documentation
 

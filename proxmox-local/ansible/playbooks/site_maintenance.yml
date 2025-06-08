@@ -1,0 +1,66 @@
+---
+# Site Maintenance Playbook
+# This playbook handles regular maintenance tasks for a Proxmox Firewall site
+# It uses the hostname to determine site configuration
+
+- name: Site Maintenance Tasks
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    site_name: "{{ site_name | default(lookup('env', 'HOSTNAME').split('-')[0]) }}"
+    sites_dir: "/opt/proxmox-firewall/common/config/sites"
+    config_file: "{{ sites_dir }}/{{ site_name }}.yml"
+
+  pre_tasks:
+    - name: Check if site config exists
+      ansible.builtin.stat:
+        path: "{{ config_file }}"
+      register: site_config_file
+
+    - name: Fail if site config doesn't exist
+      ansible.builtin.fail:
+        msg: "Site configuration file not found: {{ config_file }}"
+      when: not site_config_file.stat.exists
+
+    - name: Load site configuration
+      ansible.builtin.include_vars:
+        file: "{{ config_file }}"
+        name: site_vars
+
+    - name: Set site_config fact
+      ansible.builtin.set_fact:
+        site_config: "{{ site_vars.site_config }}"
+      when: site_vars.site_config is defined
+
+    - name: Fail if site_config is not loaded
+      ansible.builtin.fail:
+        msg: "Failed to load site_config from {{ config_file }}"
+      when: site_config is not defined
+
+  tasks:
+    - name: Verify system health
+      ansible.builtin.include_role:
+        name: system_health
+      tags: ['health']
+
+    - name: Run backup cleanup
+      ansible.builtin.include_tasks: cleanup_old_backups.yml
+      when: site_config.backup is defined and site_config.backup.enabled | default(true)
+      tags: ['backup']
+
+    - name: Check for template updates
+      ansible.builtin.command: "/opt/proxmox-firewall/scripts/check_template_updates.sh"
+      register: template_check
+      changed_when: "'Updates available' in template_check.stdout"
+      tags: ['templates']
+
+    - name: Update firewall configurations
+      ansible.builtin.include_tasks: update_firewall_config.yml
+      when: site_config.firewall is defined and site_config.firewall.enabled | default(true)
+      tags: ['firewall']
+
+    - name: Report maintenance completion
+      ansible.builtin.debug:
+        msg: "Site maintenance completed for {{ site_name }} at {{ ansible_date_time.iso8601 }}"
+      tags: ['always']

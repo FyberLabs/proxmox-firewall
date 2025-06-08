@@ -1,0 +1,80 @@
+# Docker Testing Framework .gitignore
+
+# Environment files
+configs/test.env
+*.env
+
+# Test results and reports
+reports/
+logs/
+*.log
+*.html
+*.xml
+*.json
+test-results/
+
+# SSH keys
+test-keys/
+*.pem
+*.key
+id_rsa*
+
+# Docker volumes and data
+volumes/
+data/
+
+# Terraform state
+terraform-state/
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Ansible cache
+ansible-cache/
+*.retry
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/

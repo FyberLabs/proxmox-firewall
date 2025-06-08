@@ -1,0 +1,65 @@
+---
+- name: Set up local cron jobs for Ansible maintenance
+  hosts: proxmox
+  become: true
+  vars:
+    script_dir: "/opt/proxmox-firewall/scripts"
+    ansible_dir: "/opt/proxmox-firewall/ansible"
+    log_dir: "/var/log/proxmox-firewall"
+
+  tasks:
+    - name: Ensure script directory exists
+      ansible.builtin.file:
+        path: "{{ script_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Ensure log directory exists
+      ansible.builtin.file:
+        path: "{{ log_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy ansible loader script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../scripts/ansible_loader.sh"
+        dest: "{{ script_dir }}/ansible_loader.sh"
+        mode: '0755'
+
+    - name: Create cron job configuration
+      ansible.builtin.template:
+        src: templates/local_ansible_cron.j2
+        dest: /etc/cron.d/proxmox-firewall-ansible
+        mode: '0644'
+
+    - name: Make sure ansible_loader.sh is executable
+      ansible.builtin.file:
+        path: "{{ script_dir }}/ansible_loader.sh"
+        mode: '0755'
+
+    - name: Create empty site_maintenance.yml if it doesn't exist yet
+      ansible.builtin.copy:
+        content: |
+          ---
+          # Placeholder for site_maintenance.yml
+          # This will be updated with actual content later
+          - name: Placeholder
+            hosts: localhost
+            tasks:
+              - name: Placeholder task
+                ansible.builtin.debug:
+                  msg: "Placeholder"
+        dest: "{{ ansible_dir }}/playbooks/site_maintenance.yml"
+        mode: '0644'
+        force: false
+
+    - name: Display setup completion message
+      ansible.builtin.debug:
+        msg:
+          - "========================================================"
+          - "Local cron job setup complete"
+          - "========================================================"
+          - "Cron job configured in /etc/cron.d/proxmox-firewall-ansible"
+          - "Ansible loader script: {{ script_dir }}/ansible_loader.sh"
+          - "Log directory: {{ log_dir }}"
+          - "========================================================"

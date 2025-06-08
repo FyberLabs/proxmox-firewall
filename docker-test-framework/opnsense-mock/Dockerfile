@@ -16,11 +16,11 @@ WORKDIR /app
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY src/ ./src/
-COPY certs/ ./certs/
 
 # Create necessary directories
 RUN mkdir -p /var/lib/opnsense-mock /var/log/opnsense-mock && \

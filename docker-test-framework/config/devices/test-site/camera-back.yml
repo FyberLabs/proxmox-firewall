@@ -1,0 +1,11 @@
+description: Back yard camera
+ip_address: 10.99.20.22
+mac_address: '52:54:00:12:34:59'
+name: camera-back
+ports:
+- 80
+- 554
+- 9000
+type: camera
+vlan_id: 20
+

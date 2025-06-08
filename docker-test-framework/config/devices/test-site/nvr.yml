@@ -1,0 +1,12 @@
+description: Network Video Recorder
+ip_address: 10.99.20.100
+mac_address: 52:54:00:12:34:61
+name: nvr
+ports:
+- 80
+- 443
+- 554
+- 8000
+type: nvr
+vlan_id: 20
+

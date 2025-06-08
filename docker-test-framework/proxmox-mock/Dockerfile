@@ -16,12 +16,11 @@ WORKDIR /app
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY src/ ./src/
-COPY templates/ ./templates/
-COPY static/ ./static/
 
 # Create necessary directories
 RUN mkdir -p /var/lib/proxmox-mock /var/log/proxmox-mock && \
@@ -35,7 +34,7 @@ EXPOSE 8006
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8006/api2/json/version || exit 1
+    CMD curl -f http://localhost:8006/health || exit 1
 
 # Start the application
 CMD ["python", "-m", "src.main"]

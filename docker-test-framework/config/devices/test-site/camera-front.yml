@@ -1,0 +1,11 @@
+description: Front door camera
+ip_address: 10.99.20.21
+mac_address: '52:54:00:12:34:58'
+name: camera-front
+ports:
+- 80
+- 554
+- 9000
+type: camera
+vlan_id: 20
+

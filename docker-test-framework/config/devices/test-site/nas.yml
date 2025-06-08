@@ -1,0 +1,14 @@
+description: Network Attached Storage
+ip_address: 10.99.10.100
+mac_address: '52:54:00:12:34:57'
+name: nas
+ports:
+- 80
+- 443
+- 445
+- 22
+- 139
+- 2049
+type: nas
+vlan_id: 10
+

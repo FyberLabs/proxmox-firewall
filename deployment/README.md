@@ -1,62 +1,145 @@
 # Deployment Scripts
 
-This directory contains the initial deployment scripts for setting up a new Proxmox firewall system.
+This directory contains the deployment scripts for setting up Proxmox firewall systems across multiple sites.
 
 ## Contents
 
-- ansible/: Initial Ansible playbooks for Proxmox setup
-- scripts/: Helper scripts for deployment process
+- `ansible/`: Ansible playbooks for automated deployment and configuration
+- `scripts/`: Helper scripts for site creation and deployment
+- `terraform/`: Infrastructure provisioning (called by Ansible)
+- `config/`: External site configuration files (separate from automation)
 
-## New Deployment Approach
+## Architecture Overview
 
-We've reorganized the deployment process to better handle multi-site configurations:
+The deployment system uses a clean separation of concerns:
 
-1. **Initial ISO Creation**: Build a custom Proxmox ISO for initial installation
-2. **Site-Specific Deployment**: Use the `deploy_site.sh` script to configure a site
-
-### Using the Site Deployment Script
-
-The `deploy_site.sh` script provides a simplified interface for deploying to a specific site:
-
-```bash
-# Deploy to a site by name
-./scripts/deploy_site.sh --site primary
-
-# Deploy to a site by IP address (will auto-detect site name from hostname)
-./scripts/deploy_site.sh --ip 192.168.1.10
-
-# Configure only networking for a site
-./scripts/deploy_site.sh --site office --operation network
-
-# Configure only security components
-./scripts/deploy_site.sh --site remote --operation security
+```
+Site Config (External) → Ansible (Orchestration) → Terraform (Infrastructure)
+     ↓                        ↓                        ↓
+config/site.conf      group_vars/site.yml      TF_VAR_* environment
 ```
 
-### Site Deployment Playbook
+### Key Principles
 
-The `site_deployment.yml` playbook replaces the previous `master_playbook.yml` and provides:
+1. **Single Source of Truth**: Site configuration lives in external `.conf` files
+2. **No Generated Files**: Everything is dynamic, no `.tfvars` file generation
+3. **Environment Variables**: Terraform receives all input via `TF_VAR_*` environment variables
+4. **Separation of Concerns**: Site config, orchestration, and infrastructure are cleanly separated
 
-- Clear separation of deployment phases
-- Better handling of site-specific configurations
-- Support for determining site name from hostname or IP address
-- Improved error handling and status reporting
+## Multi-Site Deployment Process
 
-### Workflow
+### 1. Create Site Configuration
 
-1. Create site configuration in `common/config/sites/<site_name>.yml`
-2. Build and boot from the Proxmox installation ISO
-3. After initial boot, run the site deployment script:
+Use the site configuration script to create a new site:
 
-   ```bash
-   ./scripts/deploy_site.sh --site <site_name>
-   ```
+```bash
+./scripts/create_site_config.sh
+```
 
-4. The system will configure:
-   - Network settings based on site configuration
-   - VM templates and deployment
-   - Firewall and security components
-   - Local maintenance scripts and cron jobs
+This creates:
+- `config/<site_name>.conf` - External site configuration
+- `ansible/group_vars/<site_name>.yml` - Minimal Ansible orchestration settings  
+- Updates `.env` file with environment variables for Terraform
 
-### Post-Deployment
+### 2. Deploy Infrastructure
 
-After deployment, local maintenance tasks will run automatically via the cron jobs set up in the Proxmox host.
+Deploy the complete infrastructure using Ansible:
+
+```bash
+# Deploy all components for a site
+ansible-playbook ansible/playbooks/05_deploy_vms.yml --limit=<site_name>
+
+# Or use the master playbook for full deployment
+ansible-playbook ansible/master_playbook.yml --limit=<site_name>
+```
+
+The deployment process:
+1. Loads site configuration from external `config/<site_name>.conf` file
+2. Sets up Terraform environment variables from site config
+3. Provisions VMs using Terraform (OPNsense, Tailscale, Zeek, etc.)
+4. Configures services and networking
+5. Saves deployment state for tracking
+
+## Configuration Files
+
+### External Site Configuration (`config/<site_name>.conf`)
+
+Contains all site-specific settings outside of the automation system:
+
+```bash
+# Site identification
+SITE_NAME="primary"
+SITE_DISPLAY_NAME="Primary Home"
+NETWORK_PREFIX="10.1"
+DOMAIN="primary.local"
+PROXMOX_HOST="192.168.1.100"
+
+# Hardware defaults
+HARDWARE_CPU_TYPE="n100"
+HARDWARE_CPU_CORES="4"
+HARDWARE_MEMORY_TOTAL="8gb"
+
+# Network interfaces
+WAN_INTERFACE="eth0"
+LAN_INTERFACE="eth2"
+CAMERA_INTERFACE="eth3"
+```
+
+### Ansible Group Variables (`ansible/group_vars/<site_name>.yml`)
+
+Contains minimal orchestration settings that reference the external config:
+
+```yaml
+site_config:
+  name: "primary"
+  display_name: "Primary Home"
+  external_config_file: "{{ playbook_dir }}/../config/primary.conf"
+  
+  # Ansible-specific settings
+  proxmox:
+    api_secret_env: "PRIMARY_PROXMOX_API_SECRET"
+  ssh:
+    public_key_file: "{{ playbook_dir }}/../credentials/primary_root.pub"
+```
+
+### Environment Variables (`.env`)
+
+Contains credentials and settings that Terraform reads via `TF_VAR_*` variables:
+
+```bash
+# Global settings
+ANSIBLE_SSH_PRIVATE_KEY_FILE="~/.ssh/id_rsa"
+PROXMOX_STORAGE_POOL="local-lvm"
+TAILSCALE_AUTH_KEY="your_key_here"
+
+# Site-specific credentials
+PRIMARY_PROXMOX_API_SECRET="your_secret_here"
+PRIMARY_NETWORK_PREFIX="10.1"
+PRIMARY_DOMAIN="primary.local"
+```
+
+## Debugging and Maintenance
+
+### Check Configuration
+```bash
+# View external site config
+cat config/primary.conf
+
+# Check Ansible variables
+cat ansible/group_vars/primary.yml
+
+# Verify environment variables
+grep PRIMARY_ .env
+```
+
+### Deployment State
+Deployment state is tracked in `deployment_state/<site_name>.state` for debugging and monitoring.
+
+### Adding Devices
+Use the device management script to add network devices to a site:
+
+```bash
+./scripts/add_device.sh
+```
+
+This integrates with the site configuration system to manage DHCP reservations and firewall rules.

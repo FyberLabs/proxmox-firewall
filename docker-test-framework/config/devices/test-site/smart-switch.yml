@@ -1,0 +1,10 @@
+description: Smart light switch
+ip_address: 10.99.30.10
+mac_address: 52:54:00:12:34:60
+name: smart-switch
+ports:
+- 80
+- 443
+type: iot
+vlan_id: 30
+

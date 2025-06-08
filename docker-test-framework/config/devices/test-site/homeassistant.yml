@@ -1,0 +1,11 @@
+description: Home Assistant server
+ip_address: 10.99.10.10
+mac_address: '52:54:00:12:34:56'
+name: homeassistant
+ports:
+- 8123
+- 1883
+- 5353
+type: homeassistant
+vlan_id: 10
+

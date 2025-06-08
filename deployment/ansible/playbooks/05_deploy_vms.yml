@@ -1,40 +1,241 @@
 ---
-- name: Deploy VMs using Terraform
-  hosts: proxmox  # This will run on all Proxmox hosts
+- name: Deploy VMs using Terraform (FIXED - No more tfvars madness!)
+  hosts: proxmox
   become: false
+  vars:
+    terraform_dir: "{{ playbook_dir }}/../terraform"
+    config_dir: "{{ playbook_dir }}/../config"
+
   tasks:
+    - name: Determine site name from inventory hostname
+      ansible.builtin.set_fact:
+        site_name_from_inventory: "{{ inventory_hostname.split('-')[0] }}"
+      when: "'-' in inventory_hostname"
+
+    - name: Fail if site name cannot be determined
+      ansible.builtin.fail:
+        msg: "Could not determine site name from inventory_hostname '{{ inventory_hostname }}'. Expected format: <site_name>-proxmox"
+      when: site_name_from_inventory is not defined
+
+    - name: Load site configuration from external file
+      delegate_to: localhost
+      become: false
+      ansible.builtin.include_vars:
+        file: "{{ config_dir }}/{{ site_name_from_inventory }}.conf"
+        name: site_env_vars
+      failed_when: false
+      register: site_config_load
+
+    - name: Load site configuration from group vars as fallback
+      ansible.builtin.include_vars:
+        file: "group_vars/{{ site_name_from_inventory }}.yml"
+        name: site_group_vars
+      when: site_config_load.failed | default(false)
+
+    - name: Set site configuration facts
+      ansible.builtin.set_fact:
+        site_config: "{{ site_group_vars.site_config | default({}) }}"
+        site_name: "{{ site_name_from_inventory }}"
+        # Load from external config if available, otherwise use group vars
+        network_prefix: "{{ site_env_vars.NETWORK_PREFIX | default(site_group_vars.site_config.network_prefix | default('10.1')) }}"
+        domain: "{{ site_env_vars.DOMAIN | default(site_group_vars.site_config.domain | default('local')) }}"
+        proxmox_host: "{{ site_env_vars.PROXMOX_HOST | default(site_group_vars.site_config.proxmox.host | default(inventory_hostname)) }}"
+
     - name: Ensure Terraform directory exists
       delegate_to: localhost
       become: false
       ansible.builtin.file:
-        path: "{{ playbook_dir }}/../terraform"
+        path: "{{ terraform_dir }}"
         state: directory
         mode: '0755'
 
-    - name: Create terraform.tfvars file with location-specific variables
+    - name: Set Terraform environment variables from site config
       delegate_to: localhost
       become: false
-      ansible.builtin.template:
-        src: templates/terraform.tfvars.j2
-        dest: "{{ playbook_dir }}/../terraform/{{ inventory_hostname }}.tfvars"
-        mode: '0644'
-      register: tfvars
+      ansible.builtin.set_fact:
+        terraform_env:
+          # Proxmox connection
+          TF_VAR_proxmox_host: "{{ proxmox_host }}"
+          TF_VAR_proxmox_api_secret: "{{ lookup('env', site_config.proxmox.api_secret_env | default(site_name | upper + '_PROXMOX_API_SECRET')) }}"
+          TF_VAR_proxmox_node: "{{ site_config.proxmox.node_name | default('pve') }}"
+
+          # Site configuration
+          TF_VAR_site_name: "{{ site_name }}"
+          TF_VAR_site_display_name: "{{ site_config.display_name | default(site_name | title + ' Site') }}"
+          TF_VAR_network_prefix: "{{ network_prefix }}"
+          TF_VAR_domain: "{{ domain }}"
+
+          # Common configuration
+          TF_VAR_timezone: "{{ site_config.timezone | default('America/New_York') }}"
+          TF_VAR_target_node: "{{ site_config.proxmox.node_name | default('pve') }}"
+
+          # SSH configuration
+          TF_VAR_ssh_public_key: "{{ lookup('file', site_config.ssh.public_key_file | default(playbook_dir + '/../credentials/' + site_name + '_root.pub'), errors='ignore') | default(lookup('env', 'TF_VAR_ssh_public_key')) }}"
+          TF_VAR_ssh_private_key_file: "{{ site_config.ssh.private_key_file | default(lookup('env', 'ANSIBLE_SSH_PRIVATE_KEY_FILE') | default('~/.ssh/id_rsa')) }}"
+
+          # Tailscale configuration
+          TF_VAR_tailscale_auth_key: "{{ lookup('env', site_config.tailscale.auth_key_env | default('TAILSCALE_AUTH_KEY')) }}"
+
+          # VM template configuration (as JSON string)
+          TF_VAR_vm_templates: "{{ site_config.vm_templates | default(default_vm_templates) | to_json }}"
+
+          # Storage configuration
+          TF_VAR_storage_pool: "{{ lookup('env', 'PROXMOX_STORAGE_POOL') | default('local-lvm') }}"
+
+          # Template IDs
+          TF_VAR_ubuntu_template_id: "{{ lookup('env', 'UBUNTU_TEMPLATE_ID') | default('9001') }}"
+          TF_VAR_opnsense_template_id: "{{ lookup('env', 'OPNSENSE_TEMPLATE_ID') | default('9000') }}"
+
+    - name: Set default VM templates if not configured
+      ansible.builtin.set_fact:
+        default_vm_templates:
+          opnsense:
+            enabled: true
+            start_on_deploy: true
+            cores: 4
+            memory: 8192
+            disk_size: "32G"
+            template_id: "{{ lookup('env', 'OPNSENSE_TEMPLATE_ID') | default('9000') }}"
+            network:
+              - bridge: "vmbr0"  # WAN
+              - bridge: "vmbr1"  # LAN
+              - bridge: "vmbr2"  # Cameras
+              - bridge: "vmbr3"  # WAN Backup
+          tailscale:
+            enabled: true
+            start_on_deploy: true
+            cores: 1
+            memory: 1024
+            disk_size: "8G"
+            template_id: "{{ lookup('env', 'UBUNTU_TEMPLATE_ID') | default('9001') }}"
+            network:
+              - bridge: "vmbr1"
+                vlan: 50  # Management VLAN
+          zeek:
+            enabled: true
+            start_on_deploy: false
+            cores: 4
+            memory: 8192
+            disk_size: "100G"
+            template_id: "{{ lookup('env', 'UBUNTU_TEMPLATE_ID') | default('9001') }}"
+            network:
+              - bridge: "vmbr1"
+                vlan: 50  # Management VLAN
+              - bridge: "vmbr0"  # WAN monitoring
+                promiscuous: true
+          homeassistant:
+            enabled: false
+            start_on_deploy: false
+            cores: 2
+            memory: 4096
+            disk_size: "32G"
+            template_id: "{{ lookup('env', 'UBUNTU_TEMPLATE_ID') | default('9001') }}"
+            network:
+              - bridge: "vmbr1"
+                vlan: 10  # Main LAN
+      when: site_config.vm_templates is not defined
+
+    - name: Initialize Terraform
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        cmd: terraform init
+        chdir: "{{ terraform_dir }}"
+      environment: "{{ terraform_env }}"
+      register: terraform_init
+      changed_when: terraform_init.stdout is search('Terraform has been successfully initialized')
 
     - name: Run Terraform plan to check for changes
       delegate_to: localhost
       become: false
-      ansible.builtin.command: terraform plan -var-file={{ inventory_hostname }}.tfvars -detailed-exitcode
-      args:
-        chdir: "{{ playbook_dir }}/../terraform"
+      ansible.builtin.command:
+        cmd: terraform plan -detailed-exitcode -out={{ site_name }}.tfplan
+        chdir: "{{ terraform_dir }}"
+      environment: "{{ terraform_env }}"
       register: terraform_plan
       failed_when: terraform_plan.rc >= 2 and terraform_plan.rc != 2
       changed_when: terraform_plan.rc == 2
 
-    - name: Initialize and apply Terraform configuration
+    - name: Display Terraform plan summary
       delegate_to: localhost
       become: false
-      ansible.builtin.command: terraform apply -auto-approve -var-file={{ inventory_hostname }}.tfvars
-      args:
-        chdir: "{{ playbook_dir }}/../terraform"
-      when: terraform_plan.rc == 2 or tfvars.changed
+      ansible.builtin.debug:
+        msg:
+          - "Terraform plan results for {{ site_config.display_name | default(site_name) }}:"
+          - "Site: {{ site_name }}"
+          - "Network: {{ network_prefix }}.0.0/16"
+          - "Domain: {{ domain }}"
+          - "Proxmox: {{ proxmox_host }}"
+          - "Changes detected: {{ 'Yes' if terraform_plan.rc == 2 else 'No' }}"
+      when: terraform_plan.rc is defined
+
+    - name: Apply Terraform configuration
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        cmd: terraform apply -auto-approve {{ site_name }}.tfplan
+        chdir: "{{ terraform_dir }}"
+      environment: "{{ terraform_env }}"
+      when: terraform_plan.rc == 2
+      register: terraform_apply
       changed_when: true
+
+    - name: Clean up plan file
+      delegate_to: localhost
+      become: false
+      ansible.builtin.file:
+        path: "{{ terraform_dir }}/{{ site_name }}.tfplan"
+        state: absent
+
+    - name: Get Terraform outputs
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command:
+        cmd: terraform output -json
+        chdir: "{{ terraform_dir }}"
+      environment: "{{ terraform_env }}"
+      register: terraform_outputs
+      changed_when: false
+      failed_when: false
+
+    - name: Parse and display VM information
+      delegate_to: localhost
+      become: false
+      ansible.builtin.debug:
+        msg:
+          - "=== Deployment Summary for {{ site_config.display_name | default(site_name) }} ==="
+          - "Site: {{ site_name }}"
+          - "Network: {{ network_prefix }}.0.0/16"
+          - "Domain: {{ domain }}"
+          - "Proxmox: {{ proxmox_host }}"
+          - "VMs deployed: {{ (terraform_outputs.stdout | from_json | dict2items | selectattr('key', 'match', '.*_ip$') | list | length) if terraform_outputs.stdout else 0 }}"
+          - "VM IPs: {{ (terraform_outputs.stdout | from_json | dict2items | selectattr('key', 'match', '.*_ip$') | map(attribute='key') | map('regex_replace', '_ip$', '') | list) if terraform_outputs.stdout else [] }}"
+      when: terraform_outputs.stdout | length > 0
+
+    - name: Save deployment state
+      delegate_to: localhost
+      become: false
+      ansible.builtin.copy:
+        content: |
+          # Deployment state for {{ site_config.display_name | default(site_name) }}
+          # Generated: {{ ansible_date_time.iso8601 }}
+
+          SITE_NAME="{{ site_name }}"
+          SITE_DISPLAY_NAME="{{ site_config.display_name | default(site_name) }}"
+          NETWORK_PREFIX="{{ network_prefix }}"
+          DOMAIN="{{ domain }}"
+          PROXMOX_HOST="{{ proxmox_host }}"
+          DEPLOYMENT_STATUS="completed"
+          DEPLOYMENT_TIME="{{ ansible_date_time.iso8601 }}"
+
+          # VM IPs (from Terraform outputs)
+          {% if terraform_outputs.stdout %}
+          {% for key, value in (terraform_outputs.stdout | from_json).items() %}
+          {% if key.endswith('_ip') %}
+          {{ key.upper() }}="{{ value.value }}"
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+        dest: "{{ playbook_dir }}/../deployment_state/{{ site_name }}.state"
+        mode: '0644'
+      when: terraform_outputs.stdout | length > 0

@@ -9,7 +9,7 @@
   become: true
   vars:
     site_name: "{{ site_name | default(lookup('env', 'HOSTNAME').split('-')[0]) }}"
-    sites_dir: "/opt/proxmox-firewall/common/config/sites"
+    sites_dir: "/opt/proxmox-firewall/config/sites"
     config_file: "{{ sites_dir }}/{{ site_name }}.yml"
 
   pre_tasks:

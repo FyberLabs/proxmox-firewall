@@ -1,6 +1,23 @@
-# Docker Testing Framework for Proxmox Firewall
+# Docker Test Framework - Integration Testing
 
-This Docker-based testing framework provides a comprehensive environment for testing the Proxmox firewall deployment, configuration, and VM management processes without requiring physical hardware.
+This framework provides comprehensive integration testing for the Proxmox firewall deployment system using Docker containers to simulate the complete infrastructure.
+
+## Testing Strategy
+
+### 1. Static Example Configs (CI/CD)
+- **`example-site.yml`** - Static site configuration for automated testing
+- **`config/devices/test-site/`** - Static device configurations  
+- **Purpose**: CI/CD pipelines, regression testing, consistent baseline
+
+### 2. User Config Testing
+- Test real user configurations from `config/sites/` and `config/devices/`
+- Validate deployment workflows with actual site configs
+- Verify configuration compatibility and deployment success
+
+### 3. Full Integration Testing
+- End-to-end deployment simulation using real Ansible and Terraform
+- Mock Proxmox, OPNsense, and network infrastructure
+- Network connectivity and firewall rule validation
 
 ## Overview
 

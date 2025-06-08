@@ -471,7 +471,7 @@ class AnsibleDeploymentTests:
         config_files = [
             {'path': 'deployment/ansible/group_vars/all.yml', 'required_keys': []},
             {'path': 'common/terraform/variables.tf', 'required_keys': []},
-            {'path': 'common/config/site_template.yml', 'required_keys': ['site']}
+            {'path': 'config/site_template.yml', 'required_keys': ['site']}
         ]
 
         for config_file in config_files:

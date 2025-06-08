@@ -129,7 +129,7 @@ run_site_configuration_tests() {
     echo "================================"
 
     # Create test site configuration
-    local site_config_dir="${PROJECT_ROOT}/common/config"
+    local site_config_dir="${PROJECT_ROOT}/config"
     mkdir -p "${site_config_dir}"
 
     cat > "${site_config_dir}/${TEST_SITE}.yml" << EOF
@@ -551,7 +551,7 @@ run_integration_tests() {
 
     # Test complete deployment readiness
     local readiness_checks=(
-        "Site Configuration:${PROJECT_ROOT}/common/config/${TEST_SITE}.yml"
+        "Site Configuration:${PROJECT_ROOT}/config/${TEST_SITE}.yml"
         "Ansible Inventory:${PROJECT_ROOT}/deployment/ansible/inventory/hosts.yml"
         "Terraform Variables:${PROJECT_ROOT}/common/terraform/${TEST_SITE}.tfvars"
         "Device Configurations:${PROJECT_ROOT}/config/devices/${TEST_SITE}"
@@ -732,7 +732,7 @@ This report covers the comprehensive testing of the Proxmox Firewall deployment 
 
 ## Files Generated
 
-- Site configuration: \`common/config/${TEST_SITE}.yml\`
+- Site configuration: \`config/${TEST_SITE}.yml\`
 - Ansible inventory: \`deployment/ansible/inventory/hosts.yml\`
 - Terraform variables: \`common/terraform/${TEST_SITE}.tfvars\`
 - Device configurations: \`config/devices/${TEST_SITE}/\`

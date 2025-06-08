@@ -80,7 +80,7 @@ run_site_configuration_tests() {
     echo "================================"
 
     # Create test site configuration
-    local site_config_dir="${PROJECT_ROOT}/common/config"
+    local site_config_dir="${PROJECT_ROOT}/config"
     mkdir -p "${site_config_dir}"
 
     cat > "${site_config_dir}/${TEST_SITE}.yml" << EOF
@@ -584,7 +584,7 @@ run_integration_tests() {
 
     # Test complete deployment readiness
     local readiness_checks=(
-        "Site Configuration:${PROJECT_ROOT}/common/config/${TEST_SITE}.yml"
+        "Site Configuration:${PROJECT_ROOT}/config/${TEST_SITE}.yml"
         "Ansible Inventory:${PROJECT_ROOT}/deployment/ansible/inventory/hosts.yml"
         "Terraform Variables:${PROJECT_ROOT}/common/terraform/${TEST_SITE}.tfvars"
         "Device Configurations:${PROJECT_ROOT}/config/devices/${TEST_SITE}"
@@ -747,7 +747,7 @@ This demo demonstrates the comprehensive testing capabilities of the Proxmox Fir
 ## Generated Configurations
 
 ### Site Configuration
-- Location: \`common/config/${TEST_SITE}.yml\`
+- Location: \`config/${TEST_SITE}.yml\`
 - Contains: Hardware specs, network topology, VLAN definitions
 - VLANs: 10 (Main), 20 (Cameras), 30 (IoT), 40 (Guest), 50 (Management)
 
@@ -835,7 +835,7 @@ EOF
     echo -e "==================================================================${NC}"
     echo -e "${BLUE}Demo Report:${NC} ${report_file}"
     echo -e "${BLUE}Test Log:${NC} ${TEST_LOG}"
-    echo -e "${BLUE}Generated Configs:${NC} ${PROJECT_ROOT}/common/config/"
+    echo -e "${BLUE}Generated Configs:${NC} ${PROJECT_ROOT}/config/"
     echo -e "${BLUE}Device Configs:${NC} ${PROJECT_ROOT}/config/devices/${TEST_SITE}/"
     echo
     echo -e "${CYAN}This demo shows how the framework can validate:${NC}"

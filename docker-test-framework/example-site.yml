@@ -1,0 +1,199 @@
+site:
+  name: "example-site"
+  network_prefix: "10.99"
+  domain: "example.local"
+
+  # Hardware Configuration for Testing
+  hardware:
+    cpu:
+      type: "n100"
+      cores: 4
+      threads: 4
+
+    memory:
+      total: "8gb"
+      vm_allocation:
+        opnsense: "4gb"
+        tailscale: "1gb"
+        zeek: "2gb"
+        homeassistant: "1gb"
+
+    storage:
+      type: "ssd"
+      size: "128gb"
+      allocation:
+        system: "20gb"
+        vms: "80gb"
+        backups: "28gb"
+
+    network:
+      interfaces:
+        - name: "eth0"
+          type: "2.5gbe"
+          role: "wan"
+          vlan: null
+        - name: "eth1"
+          type: "2.5gbe"
+          role: "wan_backup"
+          vlan: null
+        - name: "eth2"
+          type: "10gbe"
+          role: "lan"
+          vlan: [10, 30, 40, 50]
+        - name: "eth3"
+          type: "10gbe"
+          role: "cameras"
+          vlan: [20]
+
+      vlans:
+        - id: 10
+          name: "main"
+          subnet: "10.99.10.0/24"
+          dhcp: true
+          gateway: "10.99.10.1"
+        - id: 20
+          name: "cameras"
+          subnet: "10.99.20.0/24"
+          dhcp: true
+          gateway: "10.99.20.1"
+        - id: 30
+          name: "iot"
+          subnet: "10.99.30.0/24"
+          dhcp: true
+          gateway: "10.99.30.1"
+        - id: 40
+          name: "guest"
+          subnet: "10.99.40.0/24"
+          dhcp: true
+          gateway: "10.99.40.1"
+        - id: 50
+          name: "management"
+          subnet: "10.99.50.0/24"
+          dhcp: true
+          gateway: "10.99.50.1"
+
+      bridges:
+        - name: "vmbr0"
+          interface: "eth0"
+          description: "WAN Bridge"
+        - name: "vmbr1"
+          interface: "eth2"
+          description: "LAN Bridge"
+          vlans: [10, 30, 40, 50]
+        - name: "vmbr2"
+          interface: "eth3"
+          description: "Camera Bridge"
+          vlans: [20]
+        - name: "vmbr3"
+          interface: "eth1"
+          description: "WAN Backup Bridge"
+
+  # Proxmox Configuration
+  proxmox:
+    host: "proxmox-mock"
+    node_name: "pve"
+    storage_pool: "local-lvm"
+    template_storage: "local"
+
+  # VM Templates
+  vm_templates:
+    opnsense:
+      enabled: true
+      template_id: 9000
+      cores: 4
+      memory: 4096
+      disk_size: "32G"
+      start_on_deploy: true
+      network:
+        - bridge: "vmbr0"
+          model: "virtio"
+        - bridge: "vmbr1"
+          model: "virtio"
+        - bridge: "vmbr2"
+          model: "virtio"
+        - bridge: "vmbr3"
+          model: "virtio"
+
+    tailscale:
+      enabled: true
+      template_id: 9001
+      cores: 1
+      memory: 1024
+      disk_size: "8G"
+      start_on_deploy: true
+      network:
+        - bridge: "vmbr1"
+          model: "virtio"
+          vlan: 50
+
+    zeek:
+      enabled: true
+      template_id: 9001
+      cores: 2
+      memory: 2048
+      disk_size: "50G"
+      start_on_deploy: false
+      network:
+        - bridge: "vmbr1"
+          model: "virtio"
+          vlan: 50
+        - bridge: "vmbr0"
+          model: "virtio"
+          promiscuous: true
+
+    homeassistant:
+      enabled: false
+      template_id: 9001
+      cores: 2
+      memory: 1024
+      disk_size: "16G"
+      start_on_deploy: false
+      network:
+        - bridge: "vmbr1"
+          model: "virtio"
+          vlan: 10
+
+  # Security Configuration
+  security:
+    firewall:
+      default_policy: "deny"
+      rules:
+        - name: "Allow LAN to WAN"
+          source: "10.99.10.0/24"
+          destination: "any"
+          action: "allow"
+        - name: "Block IoT to LAN"
+          source: "10.99.30.0/24"
+          destination: "10.99.10.0/24"
+          action: "deny"
+        - name: "Allow Guest Internet Only"
+          source: "10.99.40.0/24"
+          destination: "!10.99.0.0/16"
+          action: "allow"
+
+    suricata:
+      enabled: true
+      interfaces: ["WAN", "WAN_BACKUP"]
+      ruleset: "emerging-threats"
+
+  # Monitoring Configuration
+  monitoring:
+    enabled: true
+    retention_days: 30
+    alerts:
+      email: "admin@example.local"
+      webhook: null
+
+  # Backup Configuration
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retention: 7
+    destination: "local"
+
+  # Credentials (environment variable names - actual values in .env)
+  credentials:
+    proxmox_api_secret: "EXAMPLE_SITE_PROXMOX_API_SECRET"
+    tailscale_auth_key: "TAILSCALE_AUTH_KEY"
+    ssh_public_key_file: "credentials/example-site_root.pub"
+    ssh_private_key_file: "credentials/example-site_root" 

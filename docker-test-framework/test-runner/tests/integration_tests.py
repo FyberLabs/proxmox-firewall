@@ -129,7 +129,7 @@ class ProxmoxFirewallIntegrationTests:
         }
 
         # Write site configuration
-        config_dir = Path('common/config')
+        config_dir = Path('config')
         config_dir.mkdir(parents=True, exist_ok=True)
 
         site_config_file = config_dir / f'{self.test_site_name}.yml'
@@ -629,7 +629,7 @@ class ProxmoxFirewallIntegrationTests:
         validation_checks = [
             {
                 'name': 'Site Configuration',
-                'check': lambda: Path(f'common/config/{self.test_site_name}.yml').exists()
+                'check': lambda: Path(f'config/{self.test_site_name}.yml').exists()
             },
             {
                 'name': 'Ansible Inventory',

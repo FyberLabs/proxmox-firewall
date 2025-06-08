@@ -3,8 +3,8 @@
   hosts: proxmox
   become: true
   vars:
-    sites_dir: /opt/proxmox-firewall/common/config/sites
-    devices_dir: /opt/proxmox-firewall/common/config/devices
+    sites_dir: /opt/proxmox-firewall/config/sites
+    devices_dir: /opt/proxmox-firewall/config/devices
     ansible_user: ansible
     ansible_group: ansible
 

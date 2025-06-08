@@ -1,0 +1,67 @@
+---
+# Ansible variables for Test Site (Docker Test Framework)
+# Main configuration is in test-site.conf (external to Ansible)
+# This file only contains Ansible-specific orchestration settings
+
+site_config:
+  # Basic site identification (loaded from external config)
+  name: "test-site"
+  display_name: "Test Site"
+
+  # External config file reference
+  external_config_file: "{{ playbook_dir }}/../docker-test-framework/test-site.conf"
+
+  # Ansible-specific settings for testing
+  proxmox:
+    api_secret_env: "TEST_SITE_PROXMOX_API_SECRET"
+    node_name: "pve"
+
+  ssh:
+    public_key_file: "{{ playbook_dir }}/../docker-test-framework/test-keys/test_root.pub"
+    private_key_file: "{{ playbook_dir }}/../docker-test-framework/test-keys/test_root"
+
+  tailscale:
+    auth_key_env: "TAILSCALE_AUTH_KEY"
+
+  # VM template defaults for testing
+  vm_templates:
+    opnsense:
+      enabled: true
+      start_on_deploy: true
+      cores: 2
+      memory: 4096
+      disk_size: "16G"
+      network:
+        - bridge: "vmbr0"  # WAN
+        - bridge: "vmbr1"  # LAN
+        - bridge: "vmbr2"  # Cameras
+        - bridge: "vmbr3"  # WAN Backup
+    tailscale:
+      enabled: true
+      start_on_deploy: true
+      cores: 1
+      memory: 512
+      disk_size: "4G"
+      network:
+        - bridge: "vmbr1"
+          vlan: 50  # Management VLAN
+    zeek:
+      enabled: true
+      start_on_deploy: false
+      cores: 2
+      memory: 2048
+      disk_size: "20G"
+      network:
+        - bridge: "vmbr1"
+          vlan: 50  # Management VLAN
+        - bridge: "vmbr0"  # WAN monitoring
+          promiscuous: true
+    homeassistant:
+      enabled: false
+      start_on_deploy: false
+      cores: 1
+      memory: 1024
+      disk_size: "8G"
+      network:
+        - bridge: "vmbr1"
+          vlan: 10  # Main LAN

@@ -8,11 +8,12 @@
 # 3. Set up Terraform for each site
 # 4. Generate appropriate .env file entries
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-CONFIG_DIR="${SCRIPT_DIR}/config"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+CONFIG_DIR="${PROJECT_ROOT}/config/sites"
 ANSIBLE_GROUP_VARS_DIR="${SCRIPT_DIR}/ansible/group_vars"
 TERRAFORM_DIR="${SCRIPT_DIR}/terraform"
 TERRAFORM_STATES_DIR="${TERRAFORM_DIR}/states"
@@ -35,50 +36,235 @@ echo -e "${BLUE}============================================================${NC
 
 # Function to create site configuration
 create_site_config() {
-    echo -e "\n${GREEN}Creating new site configuration...${NC}"
+    echo -e "${GREEN}Creating new site configuration${NC}"
+    echo -e "${YELLOW}This will create a single YAML file that contains all site configuration${NC}"
+    echo
 
-    # Gather site information
-    read -p "Site short name (lowercase, no spaces, e.g., primary): " site_name
-    read -p "Site display name (e.g., Primary Home): " site_display_name
-    read -p "Network prefix (e.g., 10.1): " network_prefix
-    read -p "Domain name (e.g., primary.local): " domain
-    read -p "Proxmox host IP or FQDN: " proxmox_host
+    # Get basic site information
+    read -p "Site short name (lowercase, no spaces): " site_name
+    read -p "Site display name: " site_display_name
+    read -p "Network prefix (e.g., 192.168): " network_prefix
+    read -p "Domain name: " domain
+    read -p "Proxmox host IP/hostname: " proxmox_host
 
-    # Validate input
-    if [[ -z "$site_name" || -z "$site_display_name" || -z "$network_prefix" || -z "$domain" || -z "$proxmox_host" ]]; then
-        echo -e "${RED}Error: All fields are required${NC}"
+    # Validate inputs
+    if [[ ! "$site_name" =~ ^[a-z0-9_-]+$ ]]; then
+        echo -e "${RED}Error: Site name must be lowercase letters, numbers, underscores, or hyphens only${NC}"
         return 1
     fi
 
-    # Create site config file (external configuration - NOT in Ansible)
-    cat > "${CONFIG_DIR}/${site_name}.conf" <<EOL
-# Site configuration for ${site_display_name}
-# This file is loaded by Ansible but remains separate from the automation system
-SITE_NAME="${site_name}"
-SITE_DISPLAY_NAME="${site_display_name}"
-NETWORK_PREFIX="${network_prefix}"
-DOMAIN="${domain}"
-PROXMOX_HOST="${proxmox_host}"
+    if [ -f "${CONFIG_DIR}/${site_name}.yml" ]; then
+        echo -e "${RED}Error: Site '${site_name}' already exists${NC}"
+        return 1
+    fi
 
-# Hardware defaults (can be overridden in site-specific YAML)
-HARDWARE_CPU_TYPE="n100"
-HARDWARE_CPU_CORES="4"
-HARDWARE_MEMORY_TOTAL="8gb"
-HARDWARE_STORAGE_TYPE="ssd"
-HARDWARE_STORAGE_SIZE="128gb"
+    # Create the comprehensive site configuration YAML
+    cat > "${CONFIG_DIR}/${site_name}.yml" <<EOL
+# Site Configuration: ${site_display_name}
+# This is the single source of truth for this site's configuration
+# Ansible reads this file directly - no duplicate configs needed
 
-# Network defaults
-WAN_INTERFACE="eth0"
-WAN_BACKUP_INTERFACE="eth1"
-LAN_INTERFACE="eth2"
-CAMERA_INTERFACE="eth3"
+site:
+  name: "${site_name}"
+  network_prefix: "${network_prefix}"
+  domain: "${domain}"
+  display_name: "${site_display_name}"
 
-# Service defaults
-TIMEZONE="America/New_York"
-TARGET_NODE="pve"
+  # Hardware Configuration
+  hardware:
+    cpu:
+      type: "n100"
+      cores: 4
+      threads: 4
+
+    memory:
+      total: "8gb"
+      vm_allocation:
+        opnsense: "4gb"
+        tailscale: "1gb"
+        zeek: "2gb"
+        homeassistant: "1gb"
+
+    storage:
+      type: "ssd"
+      size: "128gb"
+      allocation:
+        system: "20gb"
+        vms: "80gb"
+        backups: "28gb"
+
+    network:
+      interfaces:
+        - name: "eth0"
+          type: "2.5gbe"
+          role: "wan"
+          vlan: null
+        - name: "eth1"
+          type: "2.5gbe"
+          role: "wan_backup"
+          vlan: null
+        - name: "eth2"
+          type: "10gbe"
+          role: "lan"
+          vlan: [10, 30, 40, 50]
+        - name: "eth3"
+          type: "10gbe"
+          role: "cameras"
+          vlan: [20]
+
+      vlans:
+        - id: 10
+          name: "main"
+          subnet: "${network_prefix}.10.0/24"
+          dhcp: true
+          gateway: "${network_prefix}.10.1"
+        - id: 20
+          name: "cameras"
+          subnet: "${network_prefix}.20.0/24"
+          dhcp: true
+          gateway: "${network_prefix}.20.1"
+        - id: 30
+          name: "iot"
+          subnet: "${network_prefix}.30.0/24"
+          dhcp: true
+          gateway: "${network_prefix}.30.1"
+        - id: 40
+          name: "guest"
+          subnet: "${network_prefix}.40.0/24"
+          dhcp: true
+          gateway: "${network_prefix}.40.1"
+        - id: 50
+          name: "management"
+          subnet: "${network_prefix}.50.0/24"
+          dhcp: true
+          gateway: "${network_prefix}.50.1"
+
+      bridges:
+        - name: "vmbr0"
+          interface: "eth0"
+          description: "WAN Bridge"
+        - name: "vmbr1"
+          interface: "eth2"
+          description: "LAN Bridge"
+          vlans: [10, 30, 40, 50]
+        - name: "vmbr2"
+          interface: "eth3"
+          description: "Camera Bridge"
+          vlans: [20]
+        - name: "vmbr3"
+          interface: "eth1"
+          description: "WAN Backup Bridge"
+
+  # Proxmox Configuration
+  proxmox:
+    host: "${proxmox_host}"
+    node_name: "pve"
+    storage_pool: "local-lvm"
+    template_storage: "local"
+
+  # VM Templates
+  vm_templates:
+    opnsense:
+      enabled: true
+      template_id: 9000
+      cores: 4
+      memory: 4096
+      disk_size: "32G"
+      start_on_deploy: true
+      network:
+        - bridge: "vmbr0"
+          model: "virtio"
+        - bridge: "vmbr1"
+          model: "virtio"
+        - bridge: "vmbr2"
+          model: "virtio"
+        - bridge: "vmbr3"
+          model: "virtio"
+
+    tailscale:
+      enabled: true
+      template_id: 9001
+      cores: 1
+      memory: 1024
+      disk_size: "8G"
+      start_on_deploy: true
+      network:
+        - bridge: "vmbr1"
+          model: "virtio"
+          vlan: 50
+
+    zeek:
+      enabled: true
+      template_id: 9001
+      cores: 2
+      memory: 2048
+      disk_size: "50G"
+      start_on_deploy: false
+      network:
+        - bridge: "vmbr1"
+          model: "virtio"
+          vlan: 50
+        - bridge: "vmbr0"
+          model: "virtio"
+          promiscuous: true
+
+    homeassistant:
+      enabled: false
+      template_id: 9001
+      cores: 2
+      memory: 1024
+      disk_size: "16G"
+      start_on_deploy: false
+      network:
+        - bridge: "vmbr1"
+          model: "virtio"
+          vlan: 10
+
+  # Security Configuration
+  security:
+    firewall:
+      default_policy: "deny"
+      rules:
+        - name: "Allow LAN to WAN"
+          source: "${network_prefix}.10.0/24"
+          destination: "any"
+          action: "allow"
+        - name: "Block IoT to LAN"
+          source: "${network_prefix}.30.0/24"
+          destination: "${network_prefix}.10.0/24"
+          action: "deny"
+        - name: "Allow Guest Internet Only"
+          source: "${network_prefix}.40.0/24"
+          destination: "!${network_prefix}.0.0/16"
+          action: "allow"
+
+    suricata:
+      enabled: true
+      interfaces: ["WAN", "WAN_BACKUP"]
+      ruleset: "emerging-threats"
+
+  # Monitoring Configuration
+  monitoring:
+    enabled: true
+    retention_days: 30
+    alerts:
+      email: "admin@${domain}"
+      webhook: null
+
+  # Backup Configuration
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retention: 7
+    destination: "local"
+
+  # Credentials (environment variable names - actual values in .env)
+  credentials:
+    proxmox_api_secret: "${site_name^^}_PROXMOX_API_SECRET"
+    tailscale_auth_key: "TAILSCALE_AUTH_KEY"
+    ssh_public_key_file: "credentials/${site_name}_root.pub"
+    ssh_private_key_file: "credentials/${site_name}_root"
 EOL
-
-    # NO MORE TFVARS FILES! Terraform gets everything via environment variables
 
     # Create site directory for terraform state
     mkdir -p "${TERRAFORM_STATES_DIR}/${site_name}"
@@ -222,25 +408,32 @@ EOL
     fi
 
     echo -e "\n${GREEN}Site configuration for ${site_display_name} created successfully!${NC}"
+    echo -e "${YELLOW}Configuration file: ${CONFIG_DIR}/${site_name}.yml${NC}"
     echo -e "${YELLOW}Next steps:${NC}"
-    echo -e "1. Update your .env file with the necessary credentials"
-    echo -e "2. Add network devices using: ./scripts/add_device.sh"
-    echo -e "3. Deploy the complete infrastructure with Ansible:"
-    echo -e "   ansible-playbook ansible/master_playbook.yml --limit=${site_name}"
+    echo -e "1. Update ${PROJECT_ROOT}/.env with your Proxmox API secret"
+    echo -e "2. Generate SSH keys: ssh-keygen -t rsa -f credentials/${site_name}_root"
+    echo -e "3. Deploy with: ansible-playbook deployment/ansible/master_playbook.yml --limit=${site_name}"
 }
 
 # Function to list existing sites
 list_sites() {
     echo -e "\n${GREEN}Existing site configurations:${NC}"
-    if [ -z "$(ls -A ${CONFIG_DIR} 2>/dev/null)" ]; then
+    if [ -z "$(ls -A ${CONFIG_DIR}/*.yml 2>/dev/null)" ]; then
         echo -e "${YELLOW}No sites configured yet.${NC}"
     else
         echo -e "${BLUE}Site Name\tDisplay Name\t\tNetwork\t\tDomain${NC}"
         echo -e "${BLUE}--------------------------------------------------------------${NC}"
-        for site_file in "${CONFIG_DIR}"/*.conf; do
-            source "${site_file}"
-            printf "${GREEN}%-15s${NC}\t${GREEN}%-20s${NC}\t${GREEN}%-10s${NC}\t${GREEN}%s${NC}\n" \
-                "${SITE_NAME}" "${SITE_DISPLAY_NAME}" "${NETWORK_PREFIX}" "${DOMAIN}"
+        for site_file in "${CONFIG_DIR}"/*.yml; do
+            if [ -f "$site_file" ]; then
+                # Extract values from YAML using basic parsing
+                site_name=$(basename "$site_file" .yml)
+                display_name=$(grep "display_name:" "$site_file" | sed 's/.*display_name: *"\([^"]*\)".*/\1/')
+                network_prefix=$(grep "network_prefix:" "$site_file" | sed 's/.*network_prefix: *"\([^"]*\)".*/\1/')
+                domain=$(grep "domain:" "$site_file" | sed 's/.*domain: *"\([^"]*\)".*/\1/')
+                
+                printf "${GREEN}%-15s${NC}\t${GREEN}%-20s${NC}\t${GREEN}%-10s${NC}\t${GREEN}%s${NC}\n" \
+                    "${site_name}" "${display_name}" "${network_prefix}" "${domain}"
+            fi
         done
     fi
 }
@@ -251,102 +444,54 @@ edit_site() {
     echo -e "\n${GREEN}Enter the short name of the site to edit:${NC}"
     read site_name
 
-    if [ ! -f "${CONFIG_DIR}/${site_name}.conf" ]; then
+    if [ ! -f "${CONFIG_DIR}/${site_name}.yml" ]; then
         echo -e "${RED}Error: Site '${site_name}' not found${NC}"
         return 1
     fi
 
-    # Load existing values
-    source "${CONFIG_DIR}/${site_name}.conf"
+    echo -e "\n${GREEN}Opening ${site_name}.yml in your default editor...${NC}"
+    echo -e "${YELLOW}Edit the YAML file directly - it's the single source of truth${NC}"
+    
+    # Use the user's preferred editor
+    ${EDITOR:-nano} "${CONFIG_DIR}/${site_name}.yml"
+    
+    echo -e "\n${GREEN}Site '${site_name}' configuration updated!${NC}"
+}
 
-    echo -e "\n${GREEN}Editing site: ${SITE_DISPLAY_NAME}${NC}"
-    echo -e "${YELLOW}Press Enter to keep current values${NC}"
+# Function to validate site configuration
+validate_site() {
+    list_sites
+    echo -e "\n${GREEN}Enter the short name of the site to validate:${NC}"
+    read site_name
 
-    read -p "Site display name [${SITE_DISPLAY_NAME}]: " new_display_name
-    read -p "Network prefix [${NETWORK_PREFIX}]: " new_network_prefix
-    read -p "Domain name [${DOMAIN}]: " new_domain
-    read -p "Proxmox host [${PROXMOX_HOST}]: " new_proxmox_host
-
-    # Apply changes where provided
-    site_display_name=${new_display_name:-$SITE_DISPLAY_NAME}
-    network_prefix=${new_network_prefix:-$NETWORK_PREFIX}
-    domain=${new_domain:-$DOMAIN}
-    proxmox_host=${new_proxmox_host:-$PROXMOX_HOST}
-
-    # Save changes to external config file
-    cat > "${CONFIG_DIR}/${site_name}.conf" <<EOL
-# Site configuration for ${site_display_name}
-# This file is loaded by Ansible but remains separate from the automation system
-SITE_NAME="${site_name}"
-SITE_DISPLAY_NAME="${site_display_name}"
-NETWORK_PREFIX="${network_prefix}"
-DOMAIN="${domain}"
-PROXMOX_HOST="${proxmox_host}"
-
-# Hardware defaults (can be overridden in site-specific YAML)
-HARDWARE_CPU_TYPE="n100"
-HARDWARE_CPU_CORES="4"
-HARDWARE_MEMORY_TOTAL="8gb"
-HARDWARE_STORAGE_TYPE="ssd"
-HARDWARE_STORAGE_SIZE="128gb"
-
-# Network defaults
-WAN_INTERFACE="eth0"
-WAN_BACKUP_INTERFACE="eth1"
-LAN_INTERFACE="eth2"
-CAMERA_INTERFACE="eth3"
-
-# Service defaults
-TIMEZONE="America/New_York"
-TARGET_NODE="pve"
-EOL
-
-    # NO MORE TFVARS FILES! Update .env instead
-    # Update environment variables in .env file
-    if [ -f ".env" ]; then
-        # Update existing entries or add new ones
-        sed -i "/^${site_name^^}_NETWORK_PREFIX=/d" .env
-        sed -i "/^${site_name^^}_DOMAIN=/d" .env
-        sed -i "/^${site_name^^}_PROXMOX_HOST=/d" .env
-
-        cat >> .env <<EOL
-
-# Updated ${site_display_name} Configuration
-${site_name^^}_NETWORK_PREFIX="${network_prefix}"
-${site_name^^}_DOMAIN="${domain}"
-${site_name^^}_PROXMOX_HOST="${proxmox_host}"
-EOL
+    if [ ! -f "${CONFIG_DIR}/${site_name}.yml" ]; then
+        echo -e "${RED}Error: Site '${site_name}' not found${NC}"
+        return 1
     fi
 
-    # Update minimal Ansible group vars (references external config)
-    cat > "${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml" <<EOL
----
-# Ansible variables for ${site_display_name}
-# Main configuration is in config/${site_name}.conf (external to Ansible)
-# This file only contains Ansible-specific orchestration settings
-
-site_config:
-  # Basic site identification (loaded from external config)
-  name: "${site_name}"
-  display_name: "${site_display_name}"
-
-  # External config file reference
-  external_config_file: "{{ playbook_dir }}/../config/${site_name}.conf"
-
-  # Ansible-specific settings
-  proxmox:
-    api_secret_env: "${site_name^^}_PROXMOX_API_SECRET"
-    node_name: "pve"
-
-  ssh:
-    public_key_file: "{{ playbook_dir }}/../credentials/${site_name}_root.pub"
-    private_key_file: "{{ lookup('env', 'ANSIBLE_SSH_PRIVATE_KEY_FILE') | default('~/.ssh/id_rsa') }}"
-
-  tailscale:
-    auth_key_env: "TAILSCALE_AUTH_KEY"
-EOL
-
-    echo -e "\n${GREEN}Site '${site_name}' updated successfully!${NC}"
+    echo -e "\n${GREEN}Validating ${site_name}.yml...${NC}"
+    
+    # Basic YAML syntax check
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "
+import yaml
+import sys
+try:
+    with open('${CONFIG_DIR}/${site_name}.yml', 'r') as f:
+        yaml.safe_load(f)
+    print('✓ YAML syntax is valid')
+except yaml.YAMLError as e:
+    print(f'✗ YAML syntax error: {e}')
+    sys.exit(1)
+except Exception as e:
+    print(f'✗ Error reading file: {e}')
+    sys.exit(1)
+"
+    else
+        echo -e "${YELLOW}Python3 not available - skipping YAML validation${NC}"
+    fi
+    
+    echo -e "${GREEN}Configuration file: ${CONFIG_DIR}/${site_name}.yml${NC}"
 }
 
 # Function to generate deployment commands for a site
@@ -355,36 +500,34 @@ deploy_site() {
     echo -e "\n${GREEN}Enter the short name of the site to deploy:${NC}"
     read site_name
 
-    if [ ! -f "${CONFIG_DIR}/${site_name}.conf" ]; then
+    if [ ! -f "${CONFIG_DIR}/${site_name}.yml" ]; then
         echo -e "${RED}Error: Site '${site_name}' not found${NC}"
         return 1
     fi
 
-    # Load site config
-    source "${CONFIG_DIR}/${site_name}.conf"
-
-    echo -e "\n${GREEN}Deployment commands for ${SITE_DISPLAY_NAME}:${NC}"
-    echo -e "${YELLOW}Make sure your .env file is updated with credentials for this site${NC}"
+    echo -e "\n${GREEN}Deployment commands for ${site_name}:${NC}"
+    echo -e "${YELLOW}Make sure your .env file has the required credentials${NC}"
     echo
-    echo -e "${BLUE}# Configure devices for this site (if not done already)${NC}"
-    echo -e "./scripts/add_device.sh"
+    echo -e "${BLUE}# Deploy the complete infrastructure${NC}"
+    echo -e "cd ${PROJECT_ROOT}"
+    echo -e "ansible-playbook deployment/ansible/master_playbook.yml --limit=${site_name}"
     echo
-    echo -e "${BLUE}# Deploy the complete infrastructure with Ansible${NC}"
-    echo -e "ansible-playbook ansible/master_playbook.yml --limit=${site_name}"
-    echo
-    echo -e "${BLUE}# For network-specific updates only${NC}"
-    echo -e "ansible-playbook ansible/master_playbook.yml --limit=${site_name} --tags=network,dhcp"
+    echo -e "${BLUE}# For specific components only${NC}"
+    echo -e "ansible-playbook deployment/ansible/master_playbook.yml --limit=${site_name} --tags=network"
+    echo -e "ansible-playbook deployment/ansible/master_playbook.yml --limit=${site_name} --tags=vms"
     echo
 }
 
 # Main menu
 while true; do
     echo -e "\n${BLUE}============================================================${NC}"
-    echo -e "${GREEN}Options:${NC}"
+    echo -e "${GREEN}Proxmox Firewall Site Configuration Manager${NC}"
+    echo -e "${BLUE}============================================================${NC}"
     echo -e "  1. Create new site configuration"
     echo -e "  2. List existing sites"
     echo -e "  3. Edit existing site"
-    echo -e "  4. Generate deployment commands for a site"
+    echo -e "  4. Validate site configuration"
+    echo -e "  5. Generate deployment commands"
     echo -e "  q. Quit"
     echo -e "${BLUE}============================================================${NC}"
     read -p "Select an option: " option
@@ -393,7 +536,8 @@ while true; do
         1) create_site_config ;;
         2) list_sites ;;
         3) edit_site ;;
-        4) deploy_site ;;
+        4) validate_site ;;
+        5) deploy_site ;;
         q|Q) echo -e "${GREEN}Exiting...${NC}"; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac

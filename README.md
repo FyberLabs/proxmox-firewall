@@ -10,10 +10,10 @@
 - 3-4 I226v 2.5GBps Ethernet
 - 2 SFP+
 
-## Promox bare metal install
+## Proxmox bare metal install
 
 - Proxmox ISOs: [Download](https://www.proxmox.com/en/downloads/proxmox-virtual-environment/iso)
-- Modify Proxmox VE ISO with /etc/pve/datacenter.cfg
+- Custom ISO creation with automated installation answer files
 
 ### Detailed Installation Process
 

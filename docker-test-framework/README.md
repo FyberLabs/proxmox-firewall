@@ -167,7 +167,7 @@ Create custom test scenarios by adding configuration files to `configs/scenarios
 ```yaml
 # configs/scenarios/multi-site-failover.yml
 name: "Multi-Site Failover Test"
-description: "Tests failover between Tennessee and Primary Home sites"
+description: "Tests failover between Secondary and Primary Home sites"
 sites:
   - name: "tn"
     network_prefix: "10.1"

@@ -5,12 +5,12 @@ set -e
 source .env
 
 # Get validated Proxmox ISO information
-if [ ! -f "ansible/group_vars/validated_images.json" ]; then
+if [ ! -f "deployment/ansible/group_vars/validated_images.json" ]; then
     echo "Error: Validated images JSON file not found. Please run download_latest_images.sh first."
     exit 1
 fi
 
-PROXMOX_ISO_PATH=$(jq -r '.proxmox_iso_path' "ansible/group_vars/validated_images.json")
+PROXMOX_ISO_PATH=$(jq -r '.proxmox_iso_path' "deployment/ansible/group_vars/validated_images.json")
 if [ "$PROXMOX_ISO_PATH" = "null" ] || [ ! -f "$PROXMOX_ISO_PATH" ]; then
     echo "Error: Validated Proxmox ISO not found. Please run download_latest_images.sh first."
     exit 1

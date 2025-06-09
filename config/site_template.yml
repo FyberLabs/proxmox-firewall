@@ -202,6 +202,34 @@ site:
     retention: 7                   # Keep 7 days of backups
     destination: "local"           # Backup destination
 
+  # Network Devices Configuration (optional)
+  # Devices are configured inline within the site configuration
+  # Use the device management scripts to add devices, or configure manually
+  devices:
+    # Example device configurations (uncomment and customize as needed):
+    # homeassistant:                 # Device name (unique within site)
+    #   type: "homeassistant"        # Device type (matches template in config/devices_templates/)
+    #   ip_address: "10.x.10.10"     # Static IP address (replace 10.x with your network_prefix)
+    #   vlan_id: 10                  # VLAN assignment
+    #   mac_address: "52:54:00:12:34:56"  # MAC address for DHCP reservation
+    #   ports: [8123, 1883, 5353]   # Required firewall ports
+    #   override_ports: []           # Override default ports (optional)
+    #   additional_ports: []         # Additional ports beyond defaults (optional)
+    #
+    # nas:                           # Network Attached Storage
+    #   type: "nas"
+    #   ip_address: "10.x.10.100"
+    #   vlan_id: 10
+    #   mac_address: "52:54:00:12:34:57"
+    #   ports: [80, 443, 445, 22, 139, 2049]
+    #
+    # camera_front:                  # IP Camera
+    #   type: "camera"
+    #   ip_address: "10.x.20.21"
+    #   vlan_id: 20
+    #   mac_address: "52:54:00:12:34:58"
+    #   ports: [80, 554, 9000]
+
   # Credentials (environment variable names - actual values go in .env file)
   credentials:
     proxmox_api_secret: "YOUR_SITE_NAME_PROXMOX_API_SECRET"  # Update YOUR_SITE_NAME

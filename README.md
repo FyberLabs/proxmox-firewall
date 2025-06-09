@@ -4,11 +4,11 @@
 
 ## Hardware
 
-- CPU N100 to N305
-- Memory 8GB-16GB
-- Hard drive 128-512GB SSD
-- 3-4 I226v 2.5GBps Ethernet
-- 2 SFP+
+- CPU N100 to N355
+- Memory 8GB-32GB
+- Hard drive 128-512GB SSD (+CEPH NAS)
+- 3-6 I226v 2.5GBps Ethernet
+- 2 SFP+ 10GBps
 
 ## Proxmox bare metal install
 
@@ -30,19 +30,17 @@
    ```bash
    # Clone your private fork of the repository
    git clone https://github.com/yourusername/proxmox-firewall.git
-   cd proxmox-firewall
+   cd proxmox-firewalldeployment
 
    # Install required packages and Python dependencies
-   chmod +x scripts/prerequisites.sh
-   ./scripts/prerequisites.sh
+   ./deployment/scripts/prerequisites.sh
    ```
 
 2. **Download Latest Images**:
 
    ```bash
    # Download and validate latest Ubuntu and OPNsense images
-   chmod +x scripts/download_latest_images.sh
-   ./scripts/download_latest_images.sh
+   ./deployment/scripts/download_latest_images.sh
    ```
 
 3. **Configure Sites**:

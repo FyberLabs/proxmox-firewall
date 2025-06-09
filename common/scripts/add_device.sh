@@ -167,7 +167,7 @@ extract_template_variables() {
 # Function to create a new device configuration from a template
 create_device_config() {
     list_sites
-    echo -e "\n${GREEN}Enter the short name of the site to add device to:${NC}"
+    echo -e "\n${GREEN}Enter the site name of the site to add device to:${NC}"
     read site_name
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.conf" ]; then
@@ -440,7 +440,7 @@ EOL
 # Function to list devices for a site
 list_devices() {
     list_sites
-    echo -e "\n${GREEN}Enter the short name of the site:${NC}"
+    echo -e "\n${GREEN}Enter the site name of the site:${NC}"
     read site_name
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.conf" ]; then
@@ -476,7 +476,7 @@ list_devices() {
 # Function to remove a device
 remove_device() {
     list_sites
-    echo -e "\n${GREEN}Enter the short name of the site:${NC}"
+    echo -e "\n${GREEN}Enter the site name of the site:${NC}"
     read site_name
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.conf" ]; then

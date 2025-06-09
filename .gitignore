@@ -44,3 +44,10 @@ proxmox-ve-custom.iso
 #Ansible
 .ansible-lint
 .ansible
+
+# Ignore local setup files
+credentials/
+images/
+logs/
+keys/
+venv/

@@ -362,7 +362,7 @@ list_sites() {
                 display_name=$(grep "display_name:" "$site_file" | sed 's/.*display_name: *"\([^"]*\)".*/\1/')
                 network_prefix=$(grep "network_prefix:" "$site_file" | sed 's/.*network_prefix: *"\([^"]*\)".*/\1/')
                 domain=$(grep "domain:" "$site_file" | sed 's/.*domain: *"\([^"]*\)".*/\1/')
-                
+
                 printf "${GREEN}%-15s${NC}\t${GREEN}%-20s${NC}\t${GREEN}%-10s${NC}\t${GREEN}%s${NC}\n" \
                     "${site_name}" "${display_name}" "${network_prefix}" "${domain}"
             fi
@@ -373,7 +373,7 @@ list_sites() {
 # Function to edit existing site
 edit_site() {
     list_sites
-    echo -e "\n${GREEN}Enter the short name of the site to edit:${NC}"
+    echo -e "\n${GREEN}Enter the site name of the site to edit:${NC}"
     read site_name
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.yml" ]; then
@@ -383,17 +383,17 @@ edit_site() {
 
     echo -e "\n${GREEN}Opening ${site_name}.yml in your default editor...${NC}"
     echo -e "${YELLOW}Edit the YAML file directly - it's the single source of truth${NC}"
-    
+
     # Use the user's preferred editor
     ${EDITOR:-nano} "${CONFIG_DIR}/${site_name}.yml"
-    
+
     echo -e "\n${GREEN}Site '${site_name}' configuration updated!${NC}"
 }
 
 # Function to validate site configuration
 validate_site() {
     list_sites
-    echo -e "\n${GREEN}Enter the short name of the site to validate:${NC}"
+    echo -e "\n${GREEN}Enter the site name of the site to validate:${NC}"
     read site_name
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.yml" ]; then
@@ -402,7 +402,7 @@ validate_site() {
     fi
 
     echo -e "\n${GREEN}Validating ${site_name}.yml...${NC}"
-    
+
     # Basic YAML syntax check
     if command -v python3 >/dev/null 2>&1; then
         python3 -c "
@@ -422,14 +422,14 @@ except Exception as e:
     else
         echo -e "${YELLOW}Python3 not available - skipping YAML validation${NC}"
     fi
-    
+
     echo -e "${GREEN}Configuration file: ${CONFIG_DIR}/${site_name}.yml${NC}"
 }
 
 # Function to generate deployment commands for a site
 deploy_site() {
     list_sites
-    echo -e "\n${GREEN}Enter the short name of the site to deploy:${NC}"
+    echo -e "\n${GREEN}Enter the site name of the site to deploy:${NC}"
     read site_name
 
     if [ ! -f "${CONFIG_DIR}/${site_name}.yml" ]; then

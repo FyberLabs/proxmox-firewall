@@ -127,7 +127,7 @@ Site Name       Display Name
 ----------------------------------------
 primary         Primary Home
 
-Enter the short name of the site to add device to: primary
+Enter the site name of the site to add device to: primary
 
 How would you like to create the device configuration?
   1. Use an example configuration as a starting point

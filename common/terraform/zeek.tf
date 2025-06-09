@@ -64,7 +64,7 @@ resource "proxmox_vm_qemu" "zeek" {
     connection {
       type        = "ssh"
       user        = "ubuntu"
-      private_key = file(var.ssh_private_key_file)
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.4"
     }
   }

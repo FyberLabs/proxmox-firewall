@@ -236,7 +236,7 @@ resource "proxmox_vm_qemu" "security_services" {
     connection {
       type        = "ssh"
       user        = "security"
-      private_key = file(var.ssh_private_key_file)
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.8"
     }
   }
@@ -251,7 +251,7 @@ resource "proxmox_vm_qemu" "security_services" {
     connection {
       type        = "ssh"
       user        = "security"
-      private_key = file(var.ssh_private_key_file)
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.8"
     }
   }

@@ -50,7 +50,7 @@ resource "proxmox_vm_qemu" "omada_controller" {
     connection {
       type        = "ssh"
       user        = "omada"
-      private_key = file("~/.ssh/id_rsa")
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.2"
     }
   }
@@ -64,7 +64,7 @@ resource "proxmox_vm_qemu" "omada_controller" {
     connection {
       type        = "ssh"
       user        = "omada"
-      private_key = file("~/.ssh/id_rsa")
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.2"
     }
   }

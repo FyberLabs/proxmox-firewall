@@ -160,7 +160,7 @@ resource "proxmox_vm_qemu" "headscale_server" {
     connection {
       type        = "ssh"
       user        = "headscale"
-      private_key = file(var.ssh_private_key_file)
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.7"
     }
   }
@@ -175,7 +175,7 @@ resource "proxmox_vm_qemu" "headscale_server" {
     connection {
       type        = "ssh"
       user        = "headscale"
-      private_key = file(var.ssh_private_key_file)
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.7"
     }
   }

@@ -85,7 +85,7 @@ resource "proxmox_vm_qemu" "tailscale" {
     connection {
       type        = "ssh"
       user        = "tailscale"
-      private_key = file("~/.ssh/id_rsa")
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.3"
     }
   }
@@ -102,7 +102,7 @@ resource "proxmox_vm_qemu" "tailscale" {
     connection {
       type        = "ssh"
       user        = "tailscale"
-      private_key = file(var.ssh_private_key_file)
+      private_key = try(file(var.ssh_private_key_file), "")
       host        = "${var.network_prefix}.50.5"
     }
   }

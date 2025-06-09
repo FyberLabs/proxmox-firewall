@@ -38,4 +38,4 @@ RUN mkdir -p /var/lib/network-sim /var/log/network-sim && \
 EXPOSE 8080
 
 # Default command
-CMD ["python", "-m", "src.main"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]

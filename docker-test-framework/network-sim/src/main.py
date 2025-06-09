@@ -51,7 +51,7 @@ async def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "src.main:app",
         host=settings.host,
         port=settings.port,
         log_level="debug" if settings.debug else "info"

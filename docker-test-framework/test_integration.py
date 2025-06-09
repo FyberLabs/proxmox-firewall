@@ -493,6 +493,311 @@ class TestCICD(IntegrationTestSuite):
 
         print("✓ Docker Compose configurations are valid")
 
+class TestFirewallSecurity(IntegrationTestSuite):
+    """Test firewall security functionality and network isolation"""
+
+    def test_opnsense_api_authentication(self):
+        """Test OPNsense API authentication with various credentials"""
+        # Test valid authentication
+        try:
+            response = requests.get(
+                "https://localhost:8443/api/core/system/status",
+                headers={
+                    "Authorization": "Bearer test-key",
+                    "Content-Type": "application/json"
+                },
+                verify=False,
+                timeout=10
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn("status", data)
+            print("✓ OPNsense API authentication successful")
+        except requests.exceptions.RequestException as e:
+            self.fail(f"OPNsense API authentication failed: {e}")
+
+        # Test invalid authentication
+        try:
+            response = requests.get(
+                "https://localhost:8443/api/core/system/status",
+                headers={
+                    "Authorization": "Bearer invalid-key",
+                    "Content-Type": "application/json"
+                },
+                verify=False,
+                timeout=10
+            )
+            self.assertEqual(response.status_code, 401)
+            print("✓ OPNsense correctly rejects invalid authentication")
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Invalid auth test failed: {e}")
+
+    def test_firewall_rule_validation(self):
+        """Test firewall rule creation and validation"""
+        test_rules = [
+            {
+                "description": "Allow HTTP from LAN",
+                "action": "pass",
+                "interface": "lan",
+                "protocol": "tcp",
+                "source": "10.0.1.0/24",
+                "destination": "any",
+                "destination_port": "80"
+            },
+            {
+                "description": "Block SSH from WAN",
+                "action": "block",
+                "interface": "wan",
+                "protocol": "tcp",
+                "source": "any",
+                "destination": "10.0.1.0/24",
+                "destination_port": "22"
+            },
+            {
+                "description": "Allow VPN traffic",
+                "action": "pass",
+                "interface": "wan",
+                "protocol": "udp",
+                "source": "any",
+                "destination": "any",
+                "destination_port": "41641"
+            }
+        ]
+
+        for rule in test_rules:
+            try:
+                response = requests.post(
+                    "https://localhost:8443/api/firewall/filter/addRule",
+                    headers={
+                        "Authorization": "Bearer test-key",
+                        "Content-Type": "application/json"
+                    },
+                    json={"rule": rule},
+                    verify=False,
+                    timeout=10
+                )
+                self.assertIn(response.status_code, [200, 201])
+                data = response.json()
+                self.assertIn("uuid", data)
+                print(f"✓ Successfully created firewall rule: {rule['description']}")
+            except requests.exceptions.RequestException as e:
+                self.fail(f"Firewall rule creation failed for {rule['description']}: {e}")
+
+    def test_network_connectivity_simulation(self):
+        """Test network connectivity through firewall simulation"""
+        connectivity_tests = [
+            {
+                "name": "LAN to Internet (should pass)",
+                "source": "10.0.1.100",
+                "destination": "8.8.8.8",
+                "protocol": "tcp",
+                "port": 80,
+                "expected_result": "allowed"
+            },
+            {
+                "name": "WAN to LAN SSH (should block)",
+                "source": "203.0.113.1",
+                "destination": "10.0.1.100",
+                "protocol": "tcp",
+                "port": 22,
+                "expected_result": "blocked"
+            },
+            {
+                "name": "VPN network access (should pass)",
+                "source": "100.64.0.1",
+                "destination": "10.0.1.100",
+                "protocol": "tcp",
+                "port": 80,
+                "expected_result": "allowed"
+            }
+        ]
+
+        for test in connectivity_tests:
+            try:
+                response = requests.post(
+                    "http://localhost:8006/api/network/test-connectivity",
+                    headers={
+                        "Authorization": "Bearer proxmox-test-token",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "source": test["source"],
+                        "destination": test["destination"],
+                        "protocol": test["protocol"],
+                        "port": test["port"]
+                    },
+                    timeout=10
+                )
+                self.assertEqual(response.status_code, 200)
+                data = response.json()
+                self.assertIn("result", data)
+
+                if test["expected_result"] == "allowed":
+                    self.assertIn(data["result"], ["allowed", "pass"])
+                else:
+                    self.assertIn(data["result"], ["blocked", "denied"])
+
+                print(f"✓ {test['name']}: {data['result']}")
+            except requests.exceptions.RequestException as e:
+                self.fail(f"Network connectivity test failed for {test['name']}: {e}")
+
+    def test_vlan_isolation(self):
+        """Test VLAN network isolation"""
+        vlan_tests = [
+            {
+                "name": "VLAN 10 to VLAN 20 isolation",
+                "source_vlan": "10.0.10.100",
+                "dest_vlan": "10.0.20.100",
+                "should_block": True
+            },
+            {
+                "name": "Same VLAN communication",
+                "source_vlan": "10.0.10.100",
+                "dest_vlan": "10.0.10.200",
+                "should_block": False
+            },
+            {
+                "name": "Management VLAN access",
+                "source_vlan": "10.0.50.100",
+                "dest_vlan": "10.0.10.100",
+                "should_block": False  # Management can access other VLANs
+            }
+        ]
+
+        for test in vlan_tests:
+            try:
+                response = requests.post(
+                    "http://localhost:8006/api/network/test-vlan-isolation",
+                    headers={
+                        "Authorization": "Bearer proxmox-test-token",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "source": test["source_vlan"],
+                        "destination": test["dest_vlan"],
+                        "protocol": "icmp"
+                    },
+                    timeout=10
+                )
+                self.assertEqual(response.status_code, 200)
+                data = response.json()
+
+                if test["should_block"]:
+                    self.assertIn(data["result"], ["blocked", "denied"])
+                else:
+                    self.assertIn(data["result"], ["allowed", "pass"])
+
+                print(f"✓ {test['name']}: {data['result']}")
+            except requests.exceptions.RequestException as e:
+                self.fail(f"VLAN isolation test failed for {test['name']}: {e}")
+
+    def test_intrusion_detection_simulation(self):
+        """Test IDS/IPS functionality simulation"""
+        intrusion_tests = [
+            {
+                "name": "SQL Injection attempt",
+                "payload": "' OR '1'='1",
+                "expected_alert": "SQL_INJECTION"
+            },
+            {
+                "name": "Port scan detection",
+                "payload": "rapid_port_scan",
+                "expected_alert": "PORT_SCAN"
+            },
+            {
+                "name": "Brute force SSH",
+                "payload": "ssh_brute_force",
+                "expected_alert": "BRUTE_FORCE"
+            }
+        ]
+
+        for test in intrusion_tests:
+            try:
+                response = requests.post(
+                    "https://localhost:8443/api/ids/test-detection",
+                    headers={
+                        "Authorization": "Bearer test-key",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "attack_type": test["payload"],
+                        "source": "203.0.113.100",
+                        "destination": "10.0.1.100"
+                    },
+                    verify=False,
+                    timeout=10
+                )
+                self.assertEqual(response.status_code, 200)
+                data = response.json()
+                self.assertIn("alert_type", data)
+                self.assertEqual(data["alert_type"], test["expected_alert"])
+                print(f"✓ IDS detected {test['name']}: {data['alert_type']}")
+            except requests.exceptions.RequestException as e:
+                self.fail(f"IDS test failed for {test['name']}: {e}")
+
+    def test_vpn_connectivity(self):
+        """Test VPN (Tailscale) connectivity simulation"""
+        try:
+            response = requests.post(
+                "https://localhost:8443/api/tailscale/test-connection",
+                headers={
+                    "Authorization": "Bearer test-key",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "peer_ip": "100.64.0.2",
+                    "destination": "10.0.1.100",
+                    "port": 22
+                },
+                verify=False,
+                timeout=10
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn("connection_status", data)
+            self.assertEqual(data["connection_status"], "established")
+            print("✓ VPN connectivity test successful")
+        except requests.exceptions.RequestException as e:
+            self.fail(f"VPN connectivity test failed: {e}")
+
+    def test_backup_and_restore_firewall_config(self):
+        """Test firewall configuration backup and restore"""
+        try:
+            # Test backup
+            backup_response = requests.post(
+                "https://localhost:8443/api/core/backup",
+                headers={
+                    "Authorization": "Bearer test-key",
+                    "Content-Type": "application/json"
+                },
+                json={"include_rrd": False},
+                verify=False,
+                timeout=30
+            )
+            self.assertEqual(backup_response.status_code, 200)
+            backup_data = backup_response.json()
+            self.assertIn("backup_id", backup_data)
+
+            # Test restore capability
+            restore_response = requests.post(
+                "https://localhost:8443/api/core/restore/test",
+                headers={
+                    "Authorization": "Bearer test-key",
+                    "Content-Type": "application/json"
+                },
+                json={"backup_id": backup_data["backup_id"]},
+                verify=False,
+                timeout=30
+            )
+            self.assertEqual(restore_response.status_code, 200)
+            restore_data = restore_response.json()
+            self.assertIn("validation_status", restore_data)
+            self.assertEqual(restore_data["validation_status"], "valid")
+
+            print("✓ Firewall backup and restore functionality working")
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Backup/restore test failed: {e}")
+
 def run_integration_tests():
     """Run all integration tests"""
     # Create test suite
@@ -505,7 +810,8 @@ def run_integration_tests():
         TestAnsibleIntegration,
         TestMockInfrastructure,
         TestEndToEndDeployment,
-        TestCICD
+        TestCICD,
+        TestFirewallSecurity
     ]
 
     for test_class in test_classes:

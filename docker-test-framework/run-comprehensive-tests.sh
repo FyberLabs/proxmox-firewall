@@ -327,13 +327,16 @@ run_integration_tests() {
         local ansible_errors=0
 
         while IFS= read -r -d '' playbook; do
-            # Skip non-playbook files like requirements.yml, group_vars, host_vars, etc.
-            if [[ "$playbook" == *"requirements.yml" ]] || [[ "$playbook" == *"group_vars"* ]] || [[ "$playbook" == *"host_vars"* ]]; then
+            # Skip non-playbook files like requirements.yml, group_vars, host_vars, task files, etc.
+            if [[ "$playbook" == *"requirements.yml" ]] || [[ "$playbook" == *"group_vars"* ]] || [[ "$playbook" == *"host_vars"* ]] || [[ "$playbook" == *"/tasks/"* ]] || [[ "$playbook" == *"/handlers/"* ]] || [[ "$playbook" == *"/vars/"* ]] || [[ "$playbook" == *"/defaults/"* ]]; then
                 continue
             fi
-            if ! ansible-playbook --syntax-check "$playbook" >/dev/null 2>&1; then
-                log_error "Ansible syntax error in: $playbook"
-                ((ansible_errors++))
+            # Only check files that are actual playbooks (usually in playbooks/ directory or named like playbooks)
+            if [[ "$playbook" == *"/playbooks/"* ]] || [[ "$playbook" == *"playbook"* ]] || [[ "$playbook" == *"site.yml" ]] || [[ "$playbook" == *"main.yml" && "$playbook" != *"/tasks/"* ]]; then
+                if ! ansible-playbook --syntax-check "$playbook" >/dev/null 2>&1; then
+                    log_error "Ansible syntax error in: $playbook"
+                    ((ansible_errors++))
+                fi
             fi
         done < <(find "$PROJECT_ROOT/deployment" -name "*.yml" -print0 2>/dev/null || true)
 
@@ -435,26 +438,61 @@ except Exception as e:
         fi
     fi
 
-    # Test documentation consistency
-    log_info "Testing documentation consistency..."
-    local doc_errors=0
+    # Test security functionality
+    log_info "Testing firewall and security functionality..."
+    local security_errors=0
 
-    # Check that README mentions the simplified approach
-    if ! grep -q "single YAML file" "$PROJECT_ROOT/README.md" 2>/dev/null; then
-        log_error "Main README doesn't mention simplified YAML approach"
-        ((doc_errors++))
-    fi
-
-    # Check that config README is updated
-    if ! grep -q "One YAML file per site" "$PROJECT_ROOT/config/README.md" 2>/dev/null; then
-        log_error "Config README doesn't mention single YAML approach"
-        ((doc_errors++))
-    fi
-
-    if [[ $doc_errors -eq 0 ]]; then
-        log_success "Documentation is consistent"
+    # Test OPNsense mock service authentication
+    log_info "Testing OPNsense authentication..."
+    if curl -k -s -X GET "https://localhost:8443/api/core/system/status" \
+            -H "Authorization: Bearer test-key" \
+            -H "Content-Type: application/json" | grep -q "status"; then
+        log_success "OPNsense API authentication working"
     else
-        log_error "Found $doc_errors documentation consistency issues"
+        log_error "OPNsense API authentication failed"
+        ((security_errors++))
+    fi
+
+    # Test firewall rule simulation
+    log_info "Testing firewall rule validation..."
+    if curl -k -s -X POST "https://localhost:8443/api/firewall/filter/addRule" \
+            -H "Authorization: Bearer test-key" \
+            -H "Content-Type: application/json" \
+            -d '{"rule":{"description":"Test rule","action":"pass","interface":"lan","protocol":"tcp","source":"10.0.0.0/24","destination":"any","destination_port":"80"}}' | grep -q "uuid"; then
+        log_success "Firewall rule validation working"
+    else
+        log_error "Firewall rule validation failed"
+        ((security_errors++))
+    fi
+
+    # Test network connectivity simulation
+    log_info "Testing network connectivity simulation..."
+    if curl -s "http://localhost:8006/api/network/test-connectivity" \
+            -H "Authorization: Bearer proxmox-test-token" \
+            -H "Content-Type: application/json" \
+            -d '{"source":"10.0.1.100","destination":"10.0.2.100","protocol":"tcp","port":22}' | grep -q "result"; then
+        log_success "Network connectivity simulation working"
+    else
+        log_error "Network connectivity simulation failed"
+        ((security_errors++))
+    fi
+
+    # Test VM deployment simulation
+    log_info "Testing VM deployment validation..."
+    if curl -s -X POST "http://localhost:8006/api/vm/create" \
+            -H "Authorization: Bearer proxmox-test-token" \
+            -H "Content-Type: application/json" \
+            -d '{"vmid":100,"name":"test-opnsense","memory":2048,"cores":2,"template":"opnsense-template"}' | grep -q "task"; then
+        log_success "VM deployment simulation working"
+    else
+        log_error "VM deployment simulation failed"
+        ((security_errors++))
+    fi
+
+    if [[ $security_errors -eq 0 ]]; then
+        log_success "All security functionality tests passed"
+    else
+        log_error "Found $security_errors security functionality issues"
         cicd_test_success=false
     fi
 

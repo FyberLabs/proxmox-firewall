@@ -135,6 +135,26 @@ app.include_router(
     dependencies=[Depends(get_current_user)]
 )
 
+# Add specialized security testing endpoints without /core prefix for direct access
+from fastapi import APIRouter
+security_router = APIRouter()
+
+@security_router.post("/ids/test-detection")
+async def ids_test_detection(request_data: Dict[str, Any]):
+    """IDS test detection endpoint - direct access"""
+    return await core_router.test_ids_detection(request_data, True)
+
+@security_router.post("/tailscale/test-connection")
+async def tailscale_test_connection(request_data: Dict[str, Any]):
+    """Tailscale test connection endpoint - direct access"""
+    return await core_router.test_tailscale_connection(request_data, True)
+
+app.include_router(
+    security_router,
+    prefix="/api",
+    tags=["security"]
+)
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize the mock service on startup"""

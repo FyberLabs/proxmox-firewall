@@ -7,6 +7,7 @@ Simulates Proxmox VE REST API for testing purposes
 import logging
 import os
 import sys
+import time
 from typing import Dict, Any, Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -176,6 +177,170 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "proxmox-mock"}
+
+# Enhanced security testing endpoints
+
+@app.post("/api/network/test-connectivity")
+async def test_network_connectivity(
+    request_data: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Test network connectivity through firewall simulation"""
+    source = request_data.get("source")
+    destination = request_data.get("destination")
+    protocol = request_data.get("protocol", "tcp")
+    port = request_data.get("port", 80)
+
+    # Simulate network connectivity based on source/destination networks
+    result = _simulate_network_connectivity(source, destination, protocol, port)
+
+    return {
+        "status": "ok",
+        "result": result["status"],
+        "source": source,
+        "destination": destination,
+        "protocol": protocol,
+        "port": port,
+        "latency_ms": result["latency"],
+        "route": result["route"],
+                 "timestamp": int(time.time()),
+        "message": f"Network test from {source} to {destination}:{port} - {result['status']}"
+    }
+
+@app.post("/api/network/test-vlan-isolation")
+async def test_vlan_isolation(
+    request_data: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Test VLAN network isolation"""
+    source = request_data.get("source")
+    destination = request_data.get("destination")
+    protocol = request_data.get("protocol", "icmp")
+
+    # Extract VLAN IDs from IP addresses (assuming 10.0.{vlan}.x format)
+    source_vlan = _extract_vlan_from_ip(source)
+    dest_vlan = _extract_vlan_from_ip(destination)
+
+    # Simulate VLAN isolation rules
+    if source_vlan == dest_vlan:
+        result = "allowed"  # Same VLAN
+    elif source_vlan == 50:  # Management VLAN can access others
+        result = "allowed"
+    else:
+        result = "blocked"  # Inter-VLAN blocked by default
+
+    return {
+        "status": "ok",
+        "result": result,
+        "source": source,
+        "destination": destination,
+        "source_vlan": source_vlan,
+        "destination_vlan": dest_vlan,
+        "protocol": protocol,
+        "rule": f"VLAN {source_vlan} to VLAN {dest_vlan}",
+                 "timestamp": int(time.time())
+    }
+
+@app.post("/api/vm/create")
+async def create_vm(
+    request_data: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Simulate VM creation"""
+    vmid = request_data.get("vmid")
+    name = request_data.get("name")
+    memory = request_data.get("memory", 2048)
+    cores = request_data.get("cores", 2)
+    template = request_data.get("template")
+
+    if not vmid or not name:
+        raise HTTPException(status_code=400, detail="Missing required fields: vmid, name")
+
+    # Generate task ID for VM creation
+    task_id = f"UPID:pve:VM{vmid}:task{int(time.time())}"
+
+    # Store VM in mock storage
+    vm_data = {
+        "vmid": vmid,
+        "name": name,
+        "memory": memory,
+        "cores": cores,
+        "template": template,
+        "status": "stopped",
+                 "created": int(time.time()),
+        "node": "pve"
+    }
+
+    return {
+        "status": "ok",
+        "task": task_id,
+        "vmid": vmid,
+        "name": name,
+        "message": f"VM {name} (ID: {vmid}) creation initiated",
+        "estimated_time": "5 minutes"
+    }
+
+@app.get("/api2/json/nodes/{node}/qemu/{vmid}/status/current")
+async def get_vm_status(
+    node: str,
+    vmid: int,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Get VM status"""
+    return {
+        "data": {
+            "vmid": vmid,
+            "status": "running",
+            "name": f"vm-{vmid}",
+            "uptime": 86400,  # 1 day
+            "memory": {
+                "used": 1073741824,  # 1GB
+                "total": 2147483648  # 2GB
+            },
+            "cpu": 0.15,
+            "disk": {
+                "used": 5368709120,  # 5GB
+                "total": 21474836480  # 20GB
+            },
+            "network": {
+                "in": 1048576,  # 1MB
+                "out": 2097152  # 2MB
+            }
+        }
+    }
+
+def _simulate_network_connectivity(source: str, destination: str, protocol: str, port: int) -> Dict[str, Any]:
+    """Simulate network connectivity based on predefined rules"""
+    import time
+
+    # Define network access rules for testing
+    if destination == "8.8.8.8":  # Internet access
+        if source.startswith("10.0.1."):  # LAN network
+            return {"status": "allowed", "latency": 15, "route": "wan_gateway"}
+        else:
+            return {"status": "blocked", "latency": None, "route": None}
+
+    elif destination.startswith("10.0.") and source.startswith("203.0."):  # WAN to LAN
+        if port == 22:  # SSH blocked from WAN
+            return {"status": "blocked", "latency": None, "route": None}
+        else:
+            return {"status": "allowed", "latency": 5, "route": "direct"}
+
+    elif source.startswith("100.64."):  # VPN network
+        return {"status": "allowed", "latency": 8, "route": "tailscale_tunnel"}
+
+    else:
+        return {"status": "allowed", "latency": 2, "route": "direct"}
+
+def _extract_vlan_from_ip(ip: str) -> int:
+    """Extract VLAN ID from IP address (assuming 10.0.{vlan}.x format)"""
+    try:
+        parts = ip.split(".")
+        if len(parts) >= 3 and parts[0] == "10" and parts[1] == "0":
+            return int(parts[2])
+    except (ValueError, IndexError):
+        pass
+    return 1  # Default VLAN
 
 if __name__ == "__main__":
     log_level = "debug" if settings.debug else "info"

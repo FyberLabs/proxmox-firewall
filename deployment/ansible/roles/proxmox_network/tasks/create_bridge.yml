@@ -1,9 +1,9 @@
 ---
-- name: Configure {{ bridge_name }} bridge in interfaces file
+- name: Configure bridge in interfaces file
   blockinfile:
     path: /etc/network/interfaces
     block: |
-      # {{ bridge_comment }}
+      # {{ bridge_comment | default('Bridge configuration') }}
       auto {{ bridge_name }}
       {% if use_dhcp | default(false) %}
       iface {{ bridge_name }} inet dhcp
@@ -16,3 +16,4 @@
         bridge-fd 0
     marker: "# {mark} ANSIBLE MANAGED BLOCK {{ bridge_name }}"
   notify: restart networking
+  when: bridge_name is defined

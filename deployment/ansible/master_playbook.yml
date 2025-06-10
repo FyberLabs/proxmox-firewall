@@ -1,6 +1,103 @@
 ---
 # Master playbook for Proxmox Firewall deployment
-# This playbook orchestrates the entire deployment process
+# Updated to read configuration directly from site YAML files
+# Eliminates the need for duplicated group_vars
+
+- name: Load Site Configuration and Setup Environment
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # Determine site name from inventory or limit
+    site_name: "{{ ansible_limit | default(groups['all'][0].split('-')[0] if groups['all'] else 'site1') }}"
+    site_config_file: "{{ playbook_dir }}/../../config/sites/{{ site_name }}.yml"
+
+  tasks:
+    - name: Display deployment banner
+      ansible.builtin.debug:
+        msg:
+          - "==================================================="
+          - "Proxmox Firewall Deployment - Master Playbook"
+          - "==================================================="
+          - "Site: {{ site_name }}"
+          - "Configuration file: {{ site_config_file }}"
+          - "==================================================="
+          - "This playbook will run the following stages:"
+          - "1. Configure Proxmox repositories (no subscription)"
+          - "2. Perform initial Proxmox system setup"
+          - "3. Configure Terraform API access"
+          - "4. Set up network transition and bridges"
+          - "5. Create VM templates (Ubuntu, OPNsense)"
+          - "6. Deploy VMs with Terraform"
+          - "7. Configure OPNsense firewalls with device rules"
+          - "8. Set up Tailscale VPN integration"
+          - "9. Configure Suricata IDS/IPS monitoring"
+          - "10. Deploy Zeek network analysis"
+          - "11. Set up local monitoring and cron jobs"
+          - "==================================================="
+      tags: always
+
+    - name: Check if site configuration file exists
+      ansible.builtin.stat:
+        path: "{{ site_config_file }}"
+      register: site_config_stat
+
+    - name: Fail if site configuration not found
+      ansible.builtin.fail:
+        msg: |
+          Site configuration file not found: {{ site_config_file }}
+          Available sites: {{ ansible_search_path | map('regex_replace', '.*config/sites/(.*)\\.yml$', '\\1') | list }}
+      when: not site_config_stat.stat.exists
+
+    - name: Load site configuration
+      ansible.builtin.include_vars:
+        file: "{{ site_config_file }}"
+        name: full_site_config
+      tags: always
+
+    - name: Extract site configuration
+      ansible.builtin.set_fact:
+        site: "{{ full_site_config.site }}"
+        devices: "{{ full_site_config.devices | default({}) }}"
+      tags: always
+
+    - name: Set global facts for all hosts
+      ansible.builtin.set_fact:
+        site_config: "{{ site }}"
+        site_devices: "{{ devices }}"
+        site_name: "{{ site.name }}"
+        network_prefix: "{{ site.network_prefix }}"
+        domain: "{{ site.domain }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      tags: always
+
+    - name: Load environment variables
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../.env"
+        name: env_vars
+      register: env_load_result
+      failed_when:
+        - env_load_result.failed is defined
+        - env_load_result.failed
+        - "'No such file or directory' not in (env_load_result.msg | default(''))"
+      tags: always
+
+    - name: Verify required environment variables
+      ansible.builtin.fail:
+        msg: "Missing required environment variable: {{ item }}"
+      loop:
+        - "{{ site.credentials.proxmox_api_secret }}"
+        - "{{ site.credentials.tailscale_auth_key }}"
+      when: "item not in (env_vars | default({}))"
+      tags: always
+
+    - name: Create credentials directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../credentials"
+        state: directory
+        mode: '0700'
+      tags: always
 
 - name: Master Deployment Setup
   hosts: proxmox
@@ -18,73 +115,19 @@
         force: true
       register: repo_clone
 
-    - name: Display deployment banner
+    - name: Display site-specific deployment info
       ansible.builtin.debug:
         msg:
           - "==================================================="
-          - "Proxmox Firewall Deployment - Master Playbook"
+          - "Deploying for site: {{ site_config.display_name }}"
+          - "Network prefix: {{ site_config.network_prefix }}"
+          - "Domain: {{ site_config.domain }}"
+          - "Proxmox host: {{ site_config.proxmox.host }}"
+          - "VLANs configured: {{ site_config.hardware.network.vlans | length }}"
+          - "VM templates enabled: {{ site_config.vm_templates.keys() | select('match', '^.*$') | list | length }}"
+          - "Devices configured: {{ site_devices.keys() | list | length }}"
+          - "Security monitoring: {{ 'Enabled' if site_config.security.suricata.enabled else 'Disabled' }}"
           - "==================================================="
-          - "This playbook will run the following stages:"
-          - "1. Configure Proxmox repositories (no subscription)"
-          - "2. Perform initial Proxmox system setup"
-          - "3. Configure Terraform API access"
-          - "4. Set up network transition and bridges"
-          - "5. Create VM templates (Ubuntu, OPNsense)"
-          - "6. Deploy VMs with Terraform"
-          - "7. Configure OPNsense firewalls with Tailscale"
-          - "8. Set up security monitoring (Suricata, Zeek)"
-          - "==================================================="
-      tags: always
-
-    - name: Create credentials directory
-      ansible.builtin.file:
-        path: "{{ playbook_dir }}/../credentials"
-        state: directory
-        mode: '0700'
-      tags: always
-
-    - name: Ensure .env file exists
-      ansible.builtin.copy:
-        content: |
-          # Proxmox Secrets
-          ROOT_PASSWORD="your_secure_password"
-          ADMIN_EMAIL="admin@example.com"
-          # API keys will be added automatically by playbooks
-        dest: "{{ playbook_dir }}/../.env"
-        force: false
-        mode: '0600'
-      tags: always
-
-    - name: Load environment variables
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../.env"
-        name: env_vars
-      register: env_load_result
-      failed_when:
-        - env_load_result.failed is defined
-        - env_load_result.failed
-        - "'No such file or directory' not in (env_load_result.msg | default(''))"
-      tags: always
-
-    - name: Load site configurations
-      ansible.builtin.include_vars:
-        file: "group_vars/{{ item }}.yml"
-        name: "site_vars"
-      loop: "{{ sites | default(['site1', 'site2']) }}"
-      loop_control:
-        label: "{{ item }}"
-      tags: always
-
-    - name: Verify required environment variables
-      ansible.builtin.fail:
-        msg: "Missing required environment variable: {{ item }}"
-      loop: "{{ site_vars.keys() | map('regex_replace', '^', 'PROXMOX_API_SECRET_') | map('upper') | list + ['TF_VAR_tailscale_auth_key', 'TF_VAR_tailscale_password', 'TF_VAR_omada_password'] }}"
-      when: "item not in env_vars"
-      tags: always
-
-    - name: Set environment variables for Ansible
-      ansible.builtin.set_fact:
-        ansible_env: "{{ ansible_env | combine(env_vars) }}"
       tags: always
 
 # Import playbooks for each stage
@@ -120,9 +163,36 @@
   import_playbook: playbooks/05_deploy_vms.yml
   tags: ['deploy', 'vm']
 
-# Initial setup completed - local Ansible will handle security configuration
-# Note: OPNsense firewall, Tailscale VPN, Suricata IDS/IPS, and Zeek monitoring
-# are configured by the local Ansible running on Proxmox for security isolation
+# Post-VM Security Configuration
+- name: Configure OPNsense Firewall
+  import_playbook: playbooks/06_opnsense_setup.yml
+  tags: ['opnsense', 'firewall', 'security']
+  when: site_config.vm_templates.opnsense.enabled | default(true)
+
+- name: Configure Tailscale VPN Integration
+  import_playbook: playbooks/07c_opnsense_tailscale.yml
+  tags: ['tailscale', 'vpn', 'security']
+  when:
+    - site_config.vm_templates.opnsense.enabled | default(true)
+    - site_config.vm_templates.tailscale.enabled | default(true)
+
+- name: Configure Suricata IDS/IPS
+  import_playbook: playbooks/07a_opnsense_suricata.yml
+  tags: ['suricata', 'ids', 'security']
+  when:
+    - site_config.vm_templates.opnsense.enabled | default(true)
+    - site_config.security.suricata.enabled | default(true)
+
+- name: Deploy Zeek Network Monitoring
+  import_playbook: playbooks/07b_zeek_setup.yml
+  tags: ['zeek', 'monitoring', 'security']
+  when:
+    - site_config.vm_templates.zeek.enabled | default(true)
+    - site_config.monitoring.enabled | default(true)
+
+- name: Setup Local Environment and Monitoring
+  import_playbook: playbooks/06_initial_local_setup.yml
+  tags: ['local', 'monitoring', 'cron']
 
 # Optional playbook - tagged with 'never' to prevent accidental execution
 - name: Disable root password authentication
@@ -133,22 +203,45 @@
   hosts: localhost
   gather_facts: false
   tasks:
+    - name: Load device configurations if they exist
+      ansible.builtin.include_vars:
+        file: "{{ item.value.config_file }}"
+        name: "device_{{ item.key }}"
+      loop: "{{ site_devices | dict2items }}"
+      when:
+        - item.value.config_file is defined
+        - item.value.config_file | length > 0
+      loop_control:
+        label: "{{ item.key }}"
+      failed_when: false
+
     - name: Deployment summary
       ansible.builtin.debug:
         msg:
           - "==================================================="
           - "Deployment Complete!"
           - "==================================================="
-          - "API credentials have been saved to: {{ playbook_dir }}/../credentials/"
+          - "Site: {{ site_config.display_name }}"
+          - "Network: {{ site_config.network_prefix }}.0.0/16"
+          - "Domain: {{ site_config.domain }}"
+          - ""
           - "Main services deployed:"
-          - "  - OPNsense firewall with Tailscale: {{ site_vars[item].network_prefix }}.50.1"
-          - "  - Omada Controller: {{ site_vars[item].network_prefix }}.50.2"
-          - "  - Zeek Security Monitor: {{ site_vars[item].network_prefix }}.50.4"
-          - "  - Proxmox Management: {{ site_vars[item].network_prefix }}.50.10"
-          - "Security monitoring URLs:"
-          - "  - OPNsense Suricata: https://{{ site_vars[item].network_prefix }}.50.1/ui/ids"
-          - "  - OPNsense Tailscale: https://{{ site_vars[item].network_prefix }}.50.1/ui/tailscale"
-          - "  - Zeek Dashboard: http://{{ site_vars[item].network_prefix }}.50.4:8888"
+          - "  - OPNsense firewall: {{ site_config.network_prefix }}.50.1"
+          - "  - Proxmox Management: {{ site_config.network_prefix }}.50.10"
+          - "  - Tailscale VPN: integrated into OPNsense"
+          - "{% if site_config.vm_templates.zeek.enabled | default(true) %}  - Zeek Network Monitor: {{ site_config.network_prefix }}.50.4{% endif %}"
+          - ""
+          - "Configured devices: {{ site_devices.keys() | list | length }}"
+          - "  {% for device_name, device in site_devices.items() %}"
+          - "  - {{ device_name }}: {{ device.ip_address }} (VLAN {{ device.vlan_id }})"
+          - "  {% endfor %}"
+          - ""
+          - "Security monitoring:"
+          - "{% if site_config.security.suricata.enabled | default(true) %}  - Suricata IDS/IPS: https://{{ site_config.network_prefix }}.50.1/ui/ids{% endif %}"
+          - "{% if site_config.vm_templates.zeek.enabled | default(true) %}  - Zeek Dashboard: http://{{ site_config.network_prefix }}.50.4:8888{% endif %}"
+          - "  - OPNsense Admin: https://{{ site_config.network_prefix }}.50.1"
+          - "  - Proxmox Admin: https://{{ site_config.proxmox.host }}:8006"
+          - ""
+          - "Credentials saved to: {{ playbook_dir }}/../credentials/"
           - "==================================================="
-      loop: "{{ sites | default(['site1', 'site2']) }}"
       tags: always

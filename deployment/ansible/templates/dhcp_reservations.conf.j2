@@ -1,0 +1,19 @@
+# DHCP Device Reservations
+# Generated from site device configuration
+# Devices with static IPs and MAC addresses
+
+{% for device_name, device in devices.items() %}
+{% if device.mac_address is defined and device.mac_address != 'XX:XX:XX:XX:XX:XX' and device.ip_address is defined %}
+# {{ device_name }} - {{ device.type | default('device') }}
+host {{ device_name | replace('_', '-') }} {
+    hardware ethernet {{ device.mac_address }};
+    fixed-address {{ device.ip_address }};
+{% if device.hostname is defined %}
+    option host-name "{{ device.hostname }}";
+{% else %}
+    option host-name "{{ device_name }}";
+{% endif %}
+}
+
+{% endif %}
+{% endfor %}

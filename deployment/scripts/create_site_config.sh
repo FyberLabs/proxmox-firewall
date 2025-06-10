@@ -21,6 +21,7 @@ TERRAFORM_STATES_DIR="${TERRAFORM_DIR}/states"
 # Create necessary directories
 mkdir -p "${CONFIG_DIR}"
 mkdir -p "${TERRAFORM_STATES_DIR}"
+mkdir -p "${ANSIBLE_GROUP_VARS_DIR}"
 
 # Color configuration
 GREEN='\033[0;32m'
@@ -266,11 +267,20 @@ site:
     ssh_private_key_file: "credentials/${site_name}_root"
 EOL
 
+    # Create minimal Ansible group_vars file
+    echo -e "${GREEN}Creating minimal Ansible group_vars file...${NC}"
+    cat > "${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml" <<EOL
+---
+# Minimal Group Variables for ${site_name}
+# This file only contains the path to the main site configuration
+# All site configuration is read directly from config/sites/${site_name}.yml
+
+# Path to the main site configuration file
+site_config_file: "{{ playbook_dir }}/../../config/sites/${site_name}.yml"
+EOL
+
     # Create site directory for terraform state
     mkdir -p "${TERRAFORM_STATES_DIR}/${site_name}"
-
-    # Note: With simplified approach, Ansible reads the site YAML directly
-    # No need for separate group vars - everything is in the site YAML file
 
     # Add entries to the master hosts.yml if it exists
     if [ -f "${SCRIPT_DIR}/ansible/inventory/hosts.yml" ]; then
@@ -340,7 +350,9 @@ EOL
     fi
 
     echo -e "\n${GREEN}Site configuration for ${site_display_name} created successfully!${NC}"
-    echo -e "${YELLOW}Configuration file: ${CONFIG_DIR}/${site_name}.yml${NC}"
+    echo -e "${YELLOW}Configuration files created:${NC}"
+    echo -e "  - Site config: ${CONFIG_DIR}/${site_name}.yml"
+    echo -e "  - Ansible group_vars: ${ANSIBLE_GROUP_VARS_DIR}/${site_name}.yml (minimal)"
     echo -e "${YELLOW}Next steps:${NC}"
     echo -e "1. Update ${PROJECT_ROOT}/.env with your Proxmox API secret"
     echo -e "2. Generate SSH keys: ssh-keygen -t rsa -f credentials/${site_name}_root"

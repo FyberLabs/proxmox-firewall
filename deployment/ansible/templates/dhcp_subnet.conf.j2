@@ -1,0 +1,11 @@
+# DHCP Subnet Configuration for VLAN {{ vlan.id }} ({{ vlan.name }})
+
+subnet {{ network_prefix }}.{{ vlan.id }}.0 netmask 255.255.255.0 {
+    range {{ network_prefix }}.{{ vlan.id }}.100 {{ network_prefix }}.{{ vlan.id }}.200;
+    option routers {{ vlan.gateway }};
+    option domain-name-servers {{ network_prefix }}.50.1, 1.1.1.1, 8.8.8.8;
+    option domain-name "{{ vlan.name }}.{{ domain_name }}";
+    option broadcast-address {{ network_prefix }}.{{ vlan.id }}.255;
+    default-lease-time 86400;
+    max-lease-time 172800;
+}

@@ -1,0 +1,48 @@
+# Smart Fan device template
+# description: WiFi smart fan (ceiling fan, exhaust fan, etc.)
+type: smart_fan
+description: "{{ fan_description | default('Smart Fan') }}"
+vlan: {{ vlan | default(30) }}  # IoT VLAN by default
+ip_suffix: {{ ip_suffix | default(60) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 80
+    protocol: tcp
+    description: "HTTP management"
+  - port: 443
+    protocol: tcp
+    description: "HTTPS management"
+{% if manufacturer | default('') | lower == 'bigassfan' %}
+  - port: 31415
+    protocol: udp
+    description: "Big Ass Fan discovery"
+{% endif %}
+{% if manufacturer | default('') | lower == 'hunter' %}
+  - port: 8080
+    protocol: tcp
+    description: "Hunter fan control"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Cloud control via app
+allow_local_network: {{ allow_local_network | default(false) }}
+allow_from_vlans:
+  - vlan: 10  # Main LAN for local control
+    ports: [80, 443, 8080]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(false) }}
+device_type: "smart_fan"
+manufacturer: "{{ manufacturer | default('Unknown') }}"
+fan_type: "{{ fan_type | default('ceiling') }}"  # ceiling, exhaust, tower
+has_light: {{ has_light | default(false) }}
+variable_speed: {{ variable_speed | default(true) }}
+reverse_capable: {{ reverse_capable | default(true) }}
+max_speed_levels: {{ max_speed_levels | default(6) }}
+energy_monitoring: {{ energy_monitoring | default(false) }}

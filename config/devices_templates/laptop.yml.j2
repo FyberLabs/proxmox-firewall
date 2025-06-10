@@ -1,0 +1,48 @@
+# Laptop device template
+# description: Laptop computer (WiFi connected)
+type: laptop
+description: "{{ laptop_brand | default('Laptop') }} {{ laptop_model | default('') }}"
+vlan: {{ vlan | default(10) }}  # Main LAN by default
+ip_suffix: {{ ip_suffix | default(120) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 22
+    protocol: tcp
+    description: "SSH (if enabled)"
+  - port: 3389
+    protocol: tcp
+    description: "RDP (Windows)"
+  - port: 5900
+    protocol: tcp
+    description: "VNC (if enabled)"
+  - port: 5353
+    protocol: udp
+    description: "mDNS/Bonjour"
+{% if file_sharing_enabled | default(false) %}
+  - port: 445
+    protocol: tcp
+    description: "SMB file sharing"
+  - port: 139
+    protocol: tcp
+    description: "NetBIOS"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Full internet access
+allow_local_network: {{ allow_local_network | default(true) }}  # Local network access
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(false) }}  # Usually roaming
+device_type: "laptop"
+manufacturer: "{{ laptop_brand | default('Unknown') }}"
+operating_system: "{{ os | default('Unknown') }}"  # Windows, macOS, Linux
+owner: "{{ owner | default('Unknown') }}"
+is_work_device: {{ is_work_device | default(false) }}
+has_vpn: {{ has_vpn | default(false) }}
+backup_enabled: {{ backup_enabled | default(false) }}
+antivirus_enabled: {{ antivirus_enabled | default(true) }}

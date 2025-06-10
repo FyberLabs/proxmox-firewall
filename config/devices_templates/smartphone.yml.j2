@@ -1,0 +1,48 @@
+# Smartphone device template
+# description: Smartphone or mobile device (WiFi connected)
+type: smartphone
+description: "{{ phone_brand | default('Smartphone') }} {{ phone_model | default('') }}"
+vlan: {{ vlan | default(10) }}  # Main LAN by default
+ip_suffix: {{ ip_suffix | default(130) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 5353
+    protocol: udp
+    description: "mDNS/Bonjour"
+  - port: 1900
+    protocol: udp
+    description: "UPnP discovery"
+{% if airplay_enabled | default(false) %}
+  - port: 7000
+    protocol: tcp
+    description: "AirPlay"
+  - port: 7001
+    protocol: tcp
+    description: "AirPlay"
+{% endif %}
+{% if miracast_enabled | default(false) %}
+  - port: 7236
+    protocol: tcp
+    description: "Miracast"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Full internet access
+allow_local_network: {{ allow_local_network | default(true) }}  # Local network access for streaming
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(false) }}  # Roaming device
+device_type: "smartphone"
+manufacturer: "{{ phone_brand | default('Unknown') }}"
+operating_system: "{{ phone_os | default('Unknown') }}"  # iOS, Android
+owner: "{{ owner | default('Unknown') }}"
+is_work_device: {{ is_work_device | default(false) }}
+supports_airplay: {{ airplay_enabled | default(false) }}
+supports_miracast: {{ miracast_enabled | default(false) }}
+supports_chromecast: {{ chromecast_enabled | default(false) }}
+parental_controls: {{ parental_controls | default(false) }}

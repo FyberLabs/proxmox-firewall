@@ -1,0 +1,56 @@
+# Smart Light device template
+# description: WiFi smart light (bulb, switch, strip, etc.)
+type: smart_light
+description: "{{ light_description | default('Smart Light') }}"
+vlan: {{ vlan | default(30) }}  # IoT VLAN by default
+ip_suffix: {{ ip_suffix | default(70) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 80
+    protocol: tcp
+    description: "HTTP control interface"
+  - port: 443
+    protocol: tcp
+    description: "HTTPS control interface"
+{% if manufacturer | default('') | lower == 'philips' %}
+  - port: 1900
+    protocol: udp
+    description: "Philips Hue bridge discovery"
+  - port: 2100
+    protocol: udp
+    description: "Philips Hue bridge"
+{% endif %}
+{% if manufacturer | default('') | lower == 'lifx' %}
+  - port: 56700
+    protocol: udp
+    description: "LIFX LAN protocol"
+{% endif %}
+{% if manufacturer | default('') | lower == 'tplink' %}
+  - port: 9999
+    protocol: tcp
+    description: "TP-Link Kasa protocol"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Cloud control via app
+allow_local_network: {{ allow_local_network | default(false) }}
+allow_from_vlans:
+  - vlan: 10  # Main LAN for local control
+    ports: [80, 443, 9999, 2100]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(false) }}
+device_type: "smart_light"
+manufacturer: "{{ manufacturer | default('Unknown') }}"
+light_type: "{{ light_type | default('bulb') }}"  # bulb, strip, switch, panel
+supports_dimming: {{ supports_dimming | default(true) }}
+supports_color: {{ supports_color | default(false) }}
+supports_white_temperature: {{ supports_white_temperature | default(true) }}
+max_brightness: {{ max_brightness | default(100) }}
+energy_monitoring: {{ energy_monitoring | default(false) }}

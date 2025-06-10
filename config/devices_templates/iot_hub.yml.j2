@@ -3,6 +3,9 @@ type: iot_hub
 description: "{{ hub_type | default('Smart home hub (Hue Bridge, SmartThings, etc.)') }}"
 vlan: {{ vlan | default(30) }}  # IoT VLAN by default
 ip_suffix: {{ ip_suffix | default(10) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 ports:
 {% if http_api | default(true) %}
   - port: {{ http_port | default(80) }}

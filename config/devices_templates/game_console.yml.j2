@@ -3,6 +3,9 @@ type: game_console
 description: "{{ console_type | default('Gaming console (PlayStation, Xbox, etc.)') }}"
 vlan: {{ vlan | default(10) }}  # Main LAN by default
 ip_suffix: {{ ip_suffix | default(50) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 ports:
 {% if xbox | default(false) %}
   - port: 3074

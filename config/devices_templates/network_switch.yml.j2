@@ -1,0 +1,62 @@
+# Network Switch device template
+# description: Network switch (managed or unmanaged)
+type: network_switch
+description: "{{ switch_brand | default('Network Switch') }} {{ switch_model | default('') }}"
+vlan: {{ vlan | default(50) }}  # Management VLAN by default
+ip_suffix: {{ ip_suffix | default(10) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+{% if is_managed | default(true) %}
+  - port: 80
+    protocol: tcp
+    description: "HTTP management interface"
+  - port: 443
+    protocol: tcp
+    description: "HTTPS management interface"
+  - port: 22
+    protocol: tcp
+    description: "SSH management"
+  - port: 23
+    protocol: tcp
+    description: "Telnet (if enabled)"
+  - port: 161
+    protocol: udp
+    description: "SNMP monitoring"
+  - port: 162
+    protocol: udp
+    description: "SNMP traps"
+{% endif %}
+{% if poe_enabled | default(false) %}
+  - port: 8080
+    protocol: tcp
+    description: "PoE management"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(false) }}  # Usually local management only
+allow_local_network: {{ allow_local_network | default(false) }}
+allow_from_vlans:
+  - vlan: 50  # Management VLAN access
+    ports: [80, 443, 22, 23, 161, 8080]
+    protocol: tcp
+  - vlan: 10  # Main LAN for basic access
+    ports: [80, 443]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}
+device_type: "network_switch"
+manufacturer: "{{ switch_brand | default('Unknown') }}"
+switch_type: "{{ switch_type | default('managed') }}"  # managed, unmanaged, smart
+port_count: {{ port_count | default(24) }}
+supports_vlans: {{ supports_vlans | default(true) }}
+supports_poe: {{ poe_enabled | default(false) }}
+supports_stacking: {{ supports_stacking | default(false) }}
+supports_link_aggregation: {{ supports_link_aggregation | default(false) }}
+max_power_consumption: "{{ max_power_consumption | default('unknown') }}"
+firmware_version: "{{ firmware_version | default('unknown') }}"

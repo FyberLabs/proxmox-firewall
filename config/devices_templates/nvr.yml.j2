@@ -3,6 +3,9 @@ type: nvr
 description: "{{ nvr_type | default('Network Video Recorder for security cameras') }}"
 vlan: {{ vlan | default(20) }}  # Camera VLAN by default
 ip_suffix: {{ ip_suffix | default(3) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 ports:
   - port: {{ web_port | default(443) }}
     protocol: tcp

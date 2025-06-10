@@ -3,6 +3,9 @@ type: {{ device_type | default('custom') }}
 description: "{{ device_description | default('Custom Network Device') }}"
 vlan: {{ vlan | default(10) }}  # Default VLAN (10=Main LAN, 20=Cameras, 30=IoT, 40=Guest, 50=Management)
 ip_suffix: {{ ip_suffix | default(150) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 
 # Define all ports this device uses
 ports:

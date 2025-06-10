@@ -3,6 +3,9 @@ type: homeassistant
 description: "Home Assistant automation server"
 vlan: {{ vlan | default(10) }}  # Main LAN by default
 ip_suffix: {{ ip_suffix | default(10) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 ports:
   - port: {{ web_port | default(8123) }}
     protocol: tcp

@@ -95,21 +95,25 @@
   when: "vlan_config[item.tag | string].dhcp is defined or vlan_config[item.tag | string].dhcp.enabled | default(true)"
 
 
-# Prepare DHCP static mappings based on site_config.vlan_config.<vlan_id>.devices
+# Prepare DHCP static mappings from multiple sources:
+# 1. site_config.vlan_config.<vlan_id>.devices (devices defined in site YAML)
+# 2. site_config.devices (devices defined in site YAML root level)
+# 3. site_devices (devices from separate YAML files managed by add_device.sh)
 - name: Generate list of DHCP static reservations
   ansible.builtin.set_fact:
     dhcp_static_reservations: "{{ dhcp_static_reservations | default([]) + reservation_details_list }}"
   vars:
     reservation_details_list: >-
       {% set reservations = [] %}
+
+      {# Process devices from site_config.vlan_config.<vlan_id>.devices #}
       {% for vlan_id, vlan_data in vlan_config.items() %}
         {% if vlan_data.devices is defined %}
           {% for device_name, device_info in vlan_data.devices.items() %}
-            {% set mac_address = lookup('env', env_prefix_for_mac + '_' + device_name | upper + '_MAC') %}
-            {% if mac_address %}
+            {% if device_info.mac_address is defined %}
               {% set reservation = {
                   'interface': 'vlan' + vlan_id|string,
-                  'mac': mac_address,
+                  'mac': device_info.mac_address,
                   'ip': network_prefix + '.' + vlan_id|string + '.' + device_info.ip_suffix|string,
                   'hostname': device_name,
                   'descr': device_info.description | default(device_name)
@@ -119,6 +123,39 @@
           {% endfor %}
         {% endif %}
       {% endfor %}
+
+      {# Process devices from site_config.devices (root level) #}
+      {% if site_config.devices is defined %}
+        {% for device_name, device_info in site_config.devices.items() %}
+          {% if device_info.mac_address is defined and device_info.vlan_id is defined %}
+            {% set reservation = {
+                'interface': 'vlan' + device_info.vlan_id|string,
+                'mac': device_info.mac_address,
+                'ip': device_info.ip_address,
+                'hostname': device_name,
+                'descr': device_info.type | default(device_name)
+            } %}
+            {% set _ = reservations.append(reservation) %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
+      {# Process devices from site_devices (separate YAML files) #}
+      {% if site_devices is defined %}
+        {% for device_name, device_info in site_devices.items() %}
+          {% if device_info.mac_address is defined and device_info.vlan is defined %}
+            {% set reservation = {
+                'interface': 'vlan' + device_info.vlan|string,
+                'mac': device_info.mac_address,
+                'ip': device_info.ip_address,
+                'hostname': device_name,
+                'descr': device_info.type | default(device_name)
+            } %}
+            {% set _ = reservations.append(reservation) %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
       {{ reservations }}
 
 # Configure DHCP static mappings

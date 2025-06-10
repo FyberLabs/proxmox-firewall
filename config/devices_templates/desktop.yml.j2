@@ -3,6 +3,9 @@ type: desktop
 description: "{{ pc_type | default('Desktop computer') }}"
 vlan: {{ vlan | default(10) }}  # Main LAN by default
 ip_suffix: {{ ip_suffix | default(101) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 ports:
 {% if rdp_enabled | default(false) %}
   - port: 3389

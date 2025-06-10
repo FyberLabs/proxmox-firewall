@@ -3,6 +3,9 @@ type: nas
 description: "{{ nas_type | default('Network Attached Storage (TrueNAS, Synology, etc.)') }}"
 vlan: {{ vlan | default(10) }}  # Main LAN by default
 ip_suffix: {{ ip_suffix | default(100) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
 ports:
 {% if smb_enabled | default(true) %}
   - port: 445

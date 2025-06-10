@@ -1,0 +1,87 @@
+# WiFi Access Point device template
+# description: WiFi access point or wireless router
+type: wifi_access_point
+description: "{{ ap_brand | default('WiFi Access Point') }} {{ ap_model | default('') }}"
+vlan: {{ vlan | default(50) }}  # Management VLAN by default
+ip_suffix: {{ ip_suffix | default(20) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 80
+    protocol: tcp
+    description: "HTTP management interface"
+  - port: 443
+    protocol: tcp
+    description: "HTTPS management interface"
+  - port: 22
+    protocol: tcp
+    description: "SSH management"
+  - port: 23
+    protocol: tcp
+    description: "Telnet (if enabled)"
+  - port: 161
+    protocol: udp
+    description: "SNMP monitoring"
+  - port: 162
+    protocol: udp
+    description: "SNMP traps"
+{% if supports_wps | default(false) %}
+  - port: 1900
+    protocol: udp
+    description: "UPnP for WPS"
+{% endif %}
+{% if controller_managed | default(false) %}
+  - port: 8080
+    protocol: tcp
+    description: "Controller communication"
+  - port: 8443
+    protocol: tcp
+    description: "Controller secure communication"
+{% endif %}
+{% if manufacturer | default('') | lower == 'ubiquiti' %}
+  - port: 8080
+    protocol: tcp
+    description: "UniFi controller communication"
+  - port: 8443
+    protocol: tcp
+    description: "UniFi controller secure communication"
+  - port: 3478
+    protocol: udp
+    description: "UniFi STUN"
+{% endif %}
+{% if manufacturer | default('') | lower == 'aruba' %}
+  - port: 4343
+    protocol: tcp
+    description: "Aruba controller HTTPS"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # May need updates/cloud management
+allow_local_network: {{ allow_local_network | default(false) }}
+allow_from_vlans:
+  - vlan: 50  # Management VLAN access
+    ports: [80, 443, 22, 23, 161, 8080, 8443]
+    protocol: tcp
+  - vlan: 10  # Main LAN for basic access
+    ports: [80, 443]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}
+device_type: "wifi_access_point"
+manufacturer: "{{ ap_brand | default('Unknown') }}"
+ap_type: "{{ ap_type | default('standalone') }}"  # standalone, controller_managed, mesh
+wifi_standards: {{ wifi_standards | default(['802.11n', '802.11ac']) }}
+supports_2_4ghz: {{ supports_2_4ghz | default(true) }}
+supports_5ghz: {{ supports_5ghz | default(true) }}
+supports_6ghz: {{ supports_6ghz | default(false) }}
+supports_poe: {{ supports_poe | default(true) }}
+supports_mesh: {{ supports_mesh | default(false) }}
+max_clients: {{ max_clients | default(100) }}
+antenna_type: "{{ antenna_type | default('internal') }}"  # internal, external
+power_consumption: "{{ power_consumption | default('unknown') }}"
+firmware_version: "{{ firmware_version | default('unknown') }}"

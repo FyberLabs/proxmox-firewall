@@ -1,0 +1,49 @@
+# Ecobee Thermostat device template
+# description: Ecobee smart thermostat with camera and sensors
+type: ecobee
+description: "{{ ecobee_model | default('Ecobee Smart Thermostat') }}"
+vlan: {{ vlan | default(30) }}  # IoT VLAN by default (or separate ecobee VLAN)
+ip_suffix: {{ ip_suffix | default(15) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 443
+    protocol: tcp
+    description: "HTTPS API communication"
+  - port: 80
+    protocol: tcp
+    description: "HTTP communication"
+{% if camera_enabled | default(true) %}
+  - port: 554
+    protocol: tcp
+    description: "RTSP camera stream"
+  - port: 8000
+    protocol: tcp
+    description: "Camera management"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Needs cloud for app control
+allow_local_network: {{ allow_local_network | default(true) }}  # Local thermostat control
+allow_from_vlans:
+  - vlan: 10  # Main LAN for local control
+    ports: [80, 443]
+    protocol: tcp
+{% if camera_enabled | default(true) %}
+  - vlan: 10  # Allow camera access from main LAN
+    ports: [554, 8000]
+    protocol: tcp
+{% endif %}
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(true) }}
+device_type: "smart_thermostat"
+manufacturer: "Ecobee"
+has_camera: {{ camera_enabled | default(true) }}
+has_occupancy_sensor: {{ occupancy_sensor | default(true) }}
+has_temperature_sensor: {{ temperature_sensor | default(true) }}
+has_humidity_sensor: {{ humidity_sensor | default(true) }}

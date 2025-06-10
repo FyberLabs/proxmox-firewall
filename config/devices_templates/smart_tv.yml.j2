@@ -1,0 +1,69 @@
+# Smart TV device template
+# description: WiFi-connected smart TV (Samsung, LG, Sony, etc.)
+type: smart_tv
+description: "{{ tv_brand | default('Smart TV') }} {{ tv_model | default('') }}"
+vlan: {{ vlan | default(10) }}  # Main LAN for streaming
+ip_suffix: {{ ip_suffix | default(85) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+{% if tv_brand | default('') | lower == 'samsung' %}
+  - port: 8001
+    protocol: tcp
+    description: "Samsung TV remote control"
+  - port: 8002
+    protocol: tcp
+    description: "Samsung TV secure control"
+{% endif %}
+{% if tv_brand | default('') | lower == 'lg' %}
+  - port: 3000
+    protocol: tcp
+    description: "LG webOS TV control"
+{% endif %}
+{% if tv_brand | default('') | lower == 'sony' %}
+  - port: 80
+    protocol: tcp
+    description: "Sony TV HTTP control"
+  - port: 20060
+    protocol: tcp
+    description: "Sony TV control"
+{% endif %}
+  - port: 1900
+    protocol: udp
+    description: "UPnP/DLNA discovery"
+  - port: 5353
+    protocol: udp
+    description: "mDNS/Bonjour"
+  - port: 7676
+    protocol: tcp
+    description: "Media streaming"
+{% if chromecast_enabled | default(false) %}
+  - port: 8008
+    protocol: tcp
+    description: "Chromecast"
+  - port: 8009
+    protocol: tcp
+    description: "Chromecast TLS"
+{% endif %}
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Streaming apps need internet
+allow_local_network: {{ allow_local_network | default(true) }}  # Local media and control
+allow_from_vlans:
+  - vlan: 10  # Main LAN for control apps
+    ports: [8001, 8002, 3000, 80, 20060, 7676, 8008, 8009]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(false) }}
+device_type: "smart_tv"
+manufacturer: "{{ tv_brand | default('Unknown') }}"
+tv_size: "{{ tv_size | default('unknown') }}"
+supports_4k: {{ supports_4k | default(true) }}
+supports_hdr: {{ supports_hdr | default(true) }}
+supports_dolby_vision: {{ supports_dolby_vision | default(false) }}
+has_chromecast: {{ chromecast_enabled | default(false) }}

@@ -6,48 +6,27 @@ subnet {{ item.subnet | regex_replace('/.*', '') | regex_replace('\\.[0-9]+$', '
   option subnet-mask 255.255.255.0;
   option broadcast-address {{ network_prefix }}.{{ item.id }}.255;
   range {{ item.dhcp_start }} {{ item.dhcp_end }};
-  
-{% if item.id == 10 %}
-  # Static mappings for Main LAN
-  host home-assistant {
-    hardware ethernet {{ lookup('env', location_prefix + '_HOME_ASSISTANT_MAC') }};
-    fixed-address {{ network_prefix }}.10.10;
-  }
-{% if location_prefix == 'PH' %}
-  host nas {
-    hardware ethernet {{ lookup('env', 'PH_NAS_MAC') }};
-    fixed-address {{ network_prefix }}.10.100;
+
+  # Static mappings for VLAN {{ item.id }}
+{% if site_config.devices is defined %}
+{% for device_name, device_info in site_config.devices.items() %}
+{% if device_info.vlan_id == item.id and device_info.mac_address is defined %}
+  host {{ device_name }} {
+    hardware ethernet {{ device_info.mac_address }};
+    fixed-address {{ device_info.ip_address }};
   }
 {% endif %}
+{% endfor %}
 {% endif %}
 
-{% if item.id == 20 %}
-  # Static mappings for Camera Network
-  host reolink-hub {
-    hardware ethernet {{ lookup('env', location_prefix + '_REOLINK_HUB_MAC') }};
-    fixed-address {{ network_prefix }}.20.2;
-  }
-  host nvr {
-    hardware ethernet {{ lookup('env', location_prefix + '_NVR_MAC') }};
-    fixed-address {{ network_prefix }}.20.3;
+{% if site_devices is defined %}
+{% for device_name, device_info in site_devices.items() %}
+{% if device_info.vlan == item.id and device_info.mac_address is defined %}
+  host {{ device_name }} {
+    hardware ethernet {{ device_info.mac_address }};
+    fixed-address {{ device_info.ip_address }};
   }
 {% endif %}
-
-{% if item.id == 50 %}
-  # Static mappings for Management Network
-  host opnsense {
-    fixed-address {{ network_prefix }}.50.1;
-  }
-  host omada-controller {
-    hardware ethernet {{ lookup('env', location_prefix + '_OMADA_MAC') }};
-    fixed-address {{ network_prefix }}.50.2;
-  }
-  host proxmox {
-    fixed-address {{ network_prefix }}.50.10;
-  }
-  host zeek {
-    hardware ethernet {{ lookup('env', location_prefix + '_ZEEK_MAC') }};
-    fixed-address {{ network_prefix }}.50.4;
-  }
+{% endfor %}
 {% endif %}
-} 
+}

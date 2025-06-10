@@ -1,0 +1,42 @@
+# Roku Streaming Device template
+# description: Roku streaming media player
+type: roku
+description: "{{ roku_model | default('Roku Streaming Device') }}"
+vlan: {{ vlan | default(10) }}  # Main LAN for streaming
+ip_suffix: {{ ip_suffix | default(80) }}
+{% if mac_address is defined %}
+mac_address: "{{ mac_address }}"
+{% endif %}
+ports:
+  - port: 8060
+    protocol: tcp
+    description: "Roku External Control API"
+  - port: 8080
+    protocol: tcp
+    description: "Roku HTTP interface"
+  - port: 1900
+    protocol: udp
+    description: "UPnP discovery"
+  - port: 5353
+    protocol: udp
+    description: "mDNS/Bonjour"
+{% if additional_ports is defined %}
+{% for port in additional_ports %}
+  - port: {{ port.port }}
+    protocol: {{ port.protocol | default('tcp') }}
+    description: "{{ port.description | default('Custom port') }}"
+{% endfor %}
+{% endif %}
+allow_internet: {{ allow_internet | default(true) }}  # Needs internet for streaming
+allow_local_network: {{ allow_local_network | default(true) }}  # Local media access
+allow_from_vlans:
+  - vlan: 10  # Main LAN for remote control apps
+    ports: [8060, 8080]
+    protocol: tcp
+needs_dhcp_reservation: {{ needs_dhcp_reservation | default(false) }}
+device_type: "streaming_device"
+manufacturer: "Roku"
+roku_model: "{{ roku_model | default('unknown') }}"
+supports_4k: {{ supports_4k | default(false) }}
+supports_hdr: {{ supports_hdr | default(false) }}
+supports_dolby_vision: {{ supports_dolby_vision | default(false) }}

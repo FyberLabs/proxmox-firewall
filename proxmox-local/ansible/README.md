@@ -25,7 +25,7 @@ ansible/
     ├── deploy_opnsense/
     ├── deploy_omada/
     └── deploy_tailscale/
-scripts/fetch_credentials.sh
+../../common/scripts/fetch_credentials.sh
 ```
 
 ### VM Software Configuration

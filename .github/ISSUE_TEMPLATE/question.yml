@@ -1,0 +1,137 @@
+name: ❓ Question/Support
+description: Ask a question or get help with setup/configuration
+title: "[Question]: "
+labels:
+  - "question"
+  - "needs-triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reaching out! Please provide details about your question or the help you need.
+
+        **Note**: For security vulnerabilities, please use our [Security Policy](../../SECURITY.md) instead of creating a public issue.
+
+        **Alternative**: For general repository inquiries or collaboration opportunities, you can also contact us directly at github@fyberlabs.com
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm you have completed the following
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have read the relevant documentation
+          required: true
+        - label: I have checked the FAQ and troubleshooting guide
+          required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What area does your question relate to?
+      options:
+        - Initial Setup/Installation
+        - Site Configuration
+        - Network Configuration
+        - Device Management
+        - Proxmox Configuration
+        - OPNsense/Firewall Setup
+        - VPN/Tailscale Integration
+        - Security/Monitoring
+        - Troubleshooting
+        - Best Practices
+        - Hardware Recommendations
+        - Multi-site Setup
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know or what help do you need?
+      placeholder: |
+        Please be as specific as possible:
+        - What are you trying to accomplish?
+        - What specific issue are you facing?
+        - What have you already tried?
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: Provide details about your setup (if relevant)
+      placeholder: |
+        Include relevant information such as:
+        - OS: [e.g., Ubuntu 22.04]
+        - Hardware: [e.g., Intel N100, Custom build]
+        - Proxmox VE Version: [e.g., 8.1]
+        - Network setup: [e.g., single-site, multi-site]
+        - Number of devices: [approximate]
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Current Configuration
+      description: Share relevant configuration details (remove sensitive information)
+      placeholder: |
+        Include relevant parts of:
+        - Site configuration
+        - Network topology
+        - Device setup
+        - Any custom modifications
+      render: yaml
+
+  - type: textarea
+    id: attempts
+    attributes:
+      label: What Have You Tried?
+      description: What steps have you already taken to solve this?
+      placeholder: |
+        Describe:
+        - Commands or procedures you've attempted
+        - Documentation you've followed
+        - Error messages you've encountered
+        - Workarounds you've tried
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Outcome
+      description: What are you hoping to achieve?
+      placeholder: |
+        Describe:
+        - What you want to accomplish
+        - How you expect it to work
+        - Any specific requirements or constraints
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: How urgent is this question?
+      options:
+        - Low - General inquiry
+        - Medium - Planning/research
+        - High - Blocking current project
+        - Critical - Production issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other information that might be helpful
+      placeholder: |
+        Include:
+        - Screenshots or diagrams
+        - Log excerpts (redacted)
+        - Related discussions or issues
+        - Timeline constraints

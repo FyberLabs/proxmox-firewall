@@ -1,0 +1,37 @@
+name: 📝 Blank Issue
+description: Create a blank issue for cases not covered by other templates
+title: "Issue: "
+labels:
+  - "needs-triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for creating an issue! Please provide as much detail as possible to help us understand your request.
+
+        **Note**: If your issue fits one of our other templates (Bug Report, Feature Request, Documentation, or Question), please use those instead for better organization.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe your issue, request, or topic
+      placeholder: |
+        Please provide:
+        - A clear description of what you want to discuss
+        - Any relevant context or background
+        - Specific questions or requests
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Information
+      description: Any other information that might be helpful
+      placeholder: |
+        Include:
+        - Links to relevant resources
+        - Screenshots or examples
+        - Related issues or discussions
+        - Any other context

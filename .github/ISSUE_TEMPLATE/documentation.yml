@@ -1,0 +1,152 @@
+name: 📚 Documentation Issue
+description: Report documentation problems or suggest improvements
+title: "[Docs]: "
+labels:
+  - "documentation"
+  - "needs-triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! Please provide details about the documentation issue or improvement.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Issue Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing Documentation
+        - Incorrect Information
+        - Unclear Instructions
+        - Outdated Content
+        - Broken Links
+        - Typo/Grammar
+        - Formatting Issue
+        - New Documentation Request
+        - Translation Issue
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is the documentation issue located?
+      options:
+        - README.md
+        - CONTRIBUTING.md
+        - SECURITY.md
+        - docs/TROUBLESHOOTING.md
+        - docs/API.md
+        - docs/reference/FAQ.md
+        - config/README.md
+        - deployment/README.md
+        - proxmox-local/README.md
+        - Code Comments
+        - Wiki
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue Description
+      description: Describe the documentation problem or improvement needed
+      placeholder: |
+        Clearly describe:
+        - What is wrong or missing
+        - What you expected to find
+        - How it affects users
+    validations:
+      required: true
+
+  - type: textarea
+    id: location_details
+    attributes:
+      label: Specific Location
+      description: Provide specific details about where the issue is located
+      placeholder: |
+        Please provide:
+        - File name and path
+        - Section or heading
+        - Line numbers (if applicable)
+        - URL (if web-based)
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_content
+    attributes:
+      label: Current Content
+      description: What does the current documentation say? (copy/paste if applicable)
+      placeholder: |
+        Paste the current content that needs to be fixed or improved.
+        Use ``` to format code blocks.
+      render: markdown
+
+  - type: textarea
+    id: suggested_content
+    attributes:
+      label: Suggested Improvement
+      description: How should the documentation be improved?
+      placeholder: |
+        Provide your suggested changes:
+        - Corrected text
+        - Additional information needed
+        - Better examples
+        - Clearer instructions
+      render: markdown
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Target Audience
+      description: Who is the primary audience for this documentation?
+      options:
+        - New Users/Beginners
+        - Experienced Users
+        - Developers/Contributors
+        - System Administrators
+        - All Users
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this documentation fix?
+      options:
+        - Low - Minor improvement
+        - Medium - Affects user experience
+        - High - Causes confusion or errors
+        - Critical - Blocks users from completing tasks
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Provide any additional context that might be helpful
+      placeholder: |
+        Include:
+        - How you discovered this issue
+        - What you were trying to accomplish
+        - Screenshots (if applicable)
+        - Related issues or discussions
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Are you willing to help fix this documentation issue?
+      options:
+        - label: I am willing to submit a pull request to fix this documentation
+          required: false
+        - label: I can help review proposed documentation changes
+          required: false

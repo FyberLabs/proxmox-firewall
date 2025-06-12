@@ -2,6 +2,65 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.44.0] - TBD
+
+### Added
+
+#### Local Management System
+- **Automated Proxmox Self-Management**: Complete system for Proxmox servers to manage their own configuration
+  - `common/scripts/setup_local_management.sh`: Setup script for automated local management
+  - Git repository cloning and synchronization with user's fork
+  - Local Terraform state management in `/opt/proxmox-firewall/terraform-state/`
+  - Automated updates every 15 minutes via systemd timer or cron
+  - Comprehensive logging and status reporting
+  - Automatic backups before applying changes
+  - Security audit integration before updates
+- **Management Scripts**: 
+  - `local_update.sh`: Automated update process with git sync, Ansible maintenance, and Terraform apply
+  - `local_status.sh`: Status dashboard showing repository state, Terraform resources, and recent activity
+- **Documentation**: `docs/LOCAL_MANAGEMENT.md` - Comprehensive guide for setup and operation
+
+#### Security Enhancements
+- **Enhanced .gitignore**: Comprehensive security patterns for Infrastructure-as-Code projects
+  - All sensitive file types: SSH keys, certificates, API tokens, environment files
+  - Terraform state files and variables protection
+  - Ansible vault files and sensitive directories
+  - Development and build artifacts exclusion
+- **Security Audit Script**: `common/scripts/security_audit.sh` for pre-commit validation
+  - Scans for accidentally committed sensitive files
+  - Validates .gitignore completeness
+  - Checks environment variable configuration
+  - Verifies SSH key permissions
+  - Detects hardcoded secrets in configuration files
+- **Security Documentation**: Enhanced README.md and CONTRIBUTING.md with security guidelines
+  - Pre-contribution security checklist
+  - Emergency procedures for leaked secrets
+  - Best practices for environment variables
+
+### Changed
+
+#### Infrastructure Management
+- **Fork-First Strategy**: Enhanced repository for safe public forking
+  - Users encouraged to fork for private infrastructure management
+  - Local Terraform state eliminates shared state security concerns
+  - Automated sync between user's fork and local Proxmox server
+- **State Management**: Moved from remote to local Terraform state
+  - Template: `common/terraform/terraform-local-backend.tf.example`
+  - Secure local storage with proper permissions
+  - Backup integration for state protection
+
+#### Security Patterns
+- **Refined .gitignore**: Made patterns more specific to avoid blocking legitimate files
+  - Changed overly broad `*local*` pattern to specific configuration file patterns
+  - Preserved security while allowing management scripts
+  - Better organization with security-focused sections
+
+### Fixed
+
+#### File Access
+- **Git Ignore Patterns**: Fixed overly broad `*local*` pattern blocking legitimate management scripts
+- **Script Permissions**: Ensured all management scripts maintain executable permissions
+
 ## [0.43.0] - 2025-06-12
 
 ### Added

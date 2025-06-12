@@ -411,6 +411,23 @@ This script checks for:
 - SSH key permissions
 - Hardcoded secrets in configuration files
 
+### 🏠 Local Management (Post-Deployment)
+
+After initial deployment, set up automated local management on your Proxmox server:
+
+```bash
+# Run on Proxmox server to enable automatic updates from your fork
+./common/scripts/setup_local_management.sh https://github.com/YOUR_USERNAME/proxmox-firewall.git primary
+```
+
+This enables:
+- **🔄 Automatic updates** from your GitHub fork (every 15 minutes)
+- **🏗️ Local Terraform state** management 
+- **📋 Continuous monitoring** and status reporting
+- **🔒 Secure operation** with all secrets remaining local
+
+See [Local Management Documentation](docs/LOCAL_MANAGEMENT.md) for details.
+
 ## 🔧 Key Benefits
 
 - **🏗️ Infrastructure as Code**: Complete automation with Ansible and Terraform
@@ -477,6 +494,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⭐ Star this repo if you find it useful! ⭐**
 
-[Report Bug](https://github.com/FyberLabs/proxmox-firewall/issues) • [Request Feature](https://github.com/FyberLabs/proxmox-firewall/issues) • [Documentation](https://github.com/FyberLabs/proxmox-firewall/wiki)
+[Report Bug](https://github.com/FyberLabs/proxmox-firewall/issues) • [Request Feature](https://github.com/FyberLabs/proxmox-firewall/issues)
 
 </div>

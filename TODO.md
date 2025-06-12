@@ -6,9 +6,7 @@
 
 ## Fixes
 
-- Insure vlan_config is in site config yml
-- answer file jinja fix
-- what is device config jinja???
+- Proper proxmox TOML answer file jinja fixes/validation [docs](https://pve.proxmox.com/wiki/Automated_Installation)
 
 ## Documentation
 

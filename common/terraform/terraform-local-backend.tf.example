@@ -1,0 +1,20 @@
+# Local Terraform State Backend Configuration
+# This file configures Terraform to store state locally on the Proxmox server
+# Copy this file to terraform-local-backend.tf when setting up local management
+
+terraform {
+  backend "local" {
+    path = "/opt/proxmox-firewall/terraform-state/terraform.tfstate"
+  }
+}
+
+# Alternative: Remote state with locking (for advanced users)
+# terraform {
+#   backend "s3" {
+#     bucket         = "your-terraform-state-bucket"
+#     key            = "proxmox-firewall/terraform.tfstate"
+#     region         = "us-east-1"
+#     encrypt        = true
+#     dynamodb_table = "terraform-state-lock"
+#   }
+# }

@@ -149,7 +149,6 @@ Thumbs.db
 
 # Local configuration overrides
 local/
-*.local
 config.local.*
 
 # Test output and coverage
@@ -185,8 +184,14 @@ deployment_state/
 
 # Custom scripts with hardcoded values
 *custom*
-*local*
 *private*
+
+# Local configuration files (but not management scripts)
+config.local.*
+*.local.yml
+*.local.yaml
+*.local.conf
+*.local.cfg
 
 # Backup configurations
 backup_configs/

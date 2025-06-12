@@ -36,6 +36,9 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 - **[Docker Test Environment](../docker-test-framework/QUICK_START.md)** - Local development and testing
 - **[Troubleshooting](TROUBLESHOOTING.md)** - Common issues and solutions
 
+### 🏠 Management
+- **[Local Management](LOCAL_MANAGEMENT.md)** - Automated Proxmox self-management system
+
 ### 🔌 Integration
 - **[API Documentation](API.md)** - API reference for automation
 - **[Automation Examples](integration/AUTOMATION.md)** - Scripts and automation examples

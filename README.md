@@ -30,7 +30,7 @@
    ```bash
    # Clone your private fork of the repository
    git clone https://github.com/yourusername/proxmox-firewall.git
-   cd proxmox-firewalldeployment
+   cd proxmox-firewall
 
    # Install required packages and Python dependencies
    ./deployment/scripts/prerequisites.sh
@@ -61,7 +61,7 @@
 
    ```bash
    # Add devices for each site (run for each device)
-   ./scripts/add_device.sh
+   ./deployment/scripts/add_device.sh
    ```
 
    This script will:
@@ -75,8 +75,24 @@
    - Edit site configurations in `config/sites/<site_name>.yml`
    - Modify device configurations in `config/devices/<site_name>/`
    - Update `.env` file with credentials and MAC addresses
+   
+   ```bash
+   # Validate your configuration before deployment
+   ./validate-config.sh <site_name>
+   ```
 
-6. **Deploy Proxmox**:
+6. **Create Custom Proxmox ISO**:
+
+   ```bash
+   # Create custom Proxmox ISO with answer file
+   ansible-playbook deployment/ansible/playbooks/create_proxmox_iso.yml
+   ```
+
+   This playbook will:
+   - Generate a custom Proxmox ISO with site/firewall specific answer files
+   - Optionally include hardware-specific configurations
+
+7. **Deploy Proxmox**:
 
    ```bash
    # Write ISO to USB drive (replace sdX with your USB device)
@@ -88,24 +104,13 @@
    # - Server will reboot when complete
    ```
 
-7. **Create Custom Proxmox ISO**:
-
-   ```bash
-   # Create custom Proxmox ISO with answer file
-   ansible-playbook ansible/playbooks/create_proxmox_iso.yml
-   ```
-
-   This playbook will:
-   - Generate a custom Proxmox ISO with site/firewall specific answer files
-   - Optionally include hardware-specific configurations
-
 8. **Fetch Credentials**:
 
-   The `scripts/fetch_credentials.sh` script is used to retrieve and store credentials after deployment:
+   The `proxmox-local/scripts/fetch_credentials.sh` script is used to retrieve and store credentials after deployment:
 
    ```bash
-   # Fetch credentials for a specific site
-   ./scripts/fetch_credentials.sh <site_name>
+   # Fetch credentials for a specific site (run after Proxmox deployment)
+   ./proxmox-local/scripts/fetch_credentials.sh <site_name>
    ```
 
    This will:
@@ -115,23 +120,34 @@
 
 9. **Deploy Infrastructure and Configuration**:
 
+   **For CI/Testing and Initial Validation:**
    ```bash
-   # Deploy VMs and infrastructure for a specific site
-   ansible-playbook deployment/ansible/playbooks/05_deploy_vms.yml --limit=<site_name>
-
-   # Deploy complete configuration for a specific site
-   ansible-playbook ansible/master_playbook.yml --limit=<site_name>
-
-   # Or deploy to all sites
-   ansible-playbook ansible/master_playbook.yml
+   # Validate configuration and run tests
+   ./validate-config.sh <site_name>
+   
+   # Deploy basic infrastructure for testing
+   ansible-playbook deployment/ansible/master_playbook.yml --limit=<site_name>
    ```
 
-   The deployment process:
-   - Loads site configuration from external `config/<site_name>.conf` file
-   - Sets Terraform environment variables from site config and `.env` file
+   **For Production Deployment (run remotely first time):**
+   ```bash
+   # Complete production deployment with OPNsense configuration
+   cd proxmox-local/ansible
+   ansible-playbook site.yml --limit=<site_name>
+   
+   # Or for maintenance (can be run locally on Proxmox server)
+   ansible-playbook site.yml --tags maintenance
+   ```
+
+   The production deployment process:
+   - Loads site configuration from `config/sites/<site_name>.yml`
+   - Validates required environment variables from site config
    - Provisions VMs using Terraform (OPNsense, Tailscale, Zeek, etc.)
-   - Configures services, networking, and security components
-   - Saves deployment state for tracking and debugging
+   - Configures OPNsense firewall with site-specific rules
+   - Sets up Tailscale VPN integration
+   - Deploys Suricata IDS/IPS and Zeek monitoring
+   - Configures automated backups and maintenance
+   - Provides comprehensive deployment status report
 
 ### Configuration Architecture
 

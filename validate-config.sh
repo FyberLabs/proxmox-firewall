@@ -44,21 +44,21 @@ usage() {
 
 validate_yaml_syntax() {
     local file="$1"
-    
+
     if ! python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
         log_error "YAML syntax error in: $file"
         return 1
     fi
-    
+
     return 0
 }
 
 validate_site_structure() {
     local file="$1"
     local site_name="$(basename "$file" .yml)"
-    
+
     log_info "Validating structure of $site_name..."
-    
+
     # Use Python to validate structure
     python3 -c "
 import yaml
@@ -67,44 +67,44 @@ import sys
 try:
     with open('$file', 'r') as f:
         config = yaml.safe_load(f)
-    
+
     # Check top-level structure
     if 'site' not in config:
         print('✗ Missing top-level \"site\" section')
         sys.exit(1)
-    
+
     site = config['site']
-    
+
     # Check required fields
     required_fields = ['name', 'display_name', 'network_prefix', 'domain', 'proxmox']
     for field in required_fields:
         if field not in site:
             print(f'✗ Missing required field: {field}')
             sys.exit(1)
-    
+
     # Check proxmox section
     if 'host' not in site['proxmox']:
         print('✗ Missing proxmox.host')
         sys.exit(1)
-    
+
     # Check network consistency if hardware section exists
     if 'hardware' in site and 'network' in site['hardware']:
         network_prefix = site['network_prefix']
         vlans = site['hardware']['network'].get('vlans', [])
-        
+
         for vlan in vlans:
             subnet = vlan.get('subnet', '')
             if subnet and not subnet.startswith(network_prefix):
                 print(f'✗ VLAN {vlan.get(\"id\")} subnet {subnet} doesn\\'t match network prefix {network_prefix}')
                 sys.exit(1)
-    
+
     print('✓ Site structure is valid')
-    
+
 except Exception as e:
     print(f'✗ Validation error: {e}')
     sys.exit(1)
 "
-    
+
     if [[ $? -eq 0 ]]; then
         log_success "Structure validation passed for $site_name"
         return 0
@@ -117,9 +117,9 @@ except Exception as e:
 validate_credentials() {
     local file="$1"
     local site_name="$(basename "$file" .yml)"
-    
+
     log_info "Checking credentials configuration for $site_name..."
-    
+
     # Extract credential environment variables
     local cred_vars=()
     if python3 -c "
@@ -153,7 +153,7 @@ for key, value in credentials.items():
             print(value)
 ")
     fi
-    
+
     # Check if .env file exists and contains the variables
     if [[ -f ".env" ]]; then
         local missing_vars=()
@@ -162,7 +162,7 @@ for key, value in credentials.items():
                 missing_vars+=("$var")
             fi
         done
-        
+
         if [[ ${#missing_vars[@]} -eq 0 ]]; then
             log_success "All required credentials found in .env for $site_name"
         else
@@ -175,9 +175,9 @@ for key, value in credentials.items():
 
 validate_deployment_readiness() {
     log_info "Checking deployment readiness..."
-    
+
     local issues=0
-    
+
     # Check for required tools
     local required_tools=("ansible-playbook" "terraform" "docker")
     for tool in "${required_tools[@]}"; do
@@ -186,13 +186,13 @@ validate_deployment_readiness() {
             ((issues++))
         fi
     done
-    
+
     # Check deployment scripts
     if [[ ! -f "deployment/scripts/create_site_config.sh" ]]; then
         log_warning "Site creation script not found"
         ((issues++))
     fi
-    
+
     # Check Ansible playbooks
     if [[ -d "deployment/ansible/playbooks" ]]; then
         local playbook_errors=0
@@ -204,15 +204,51 @@ validate_deployment_readiness() {
                 fi
             fi
         done < <(find deployment/ansible/playbooks -name "*.yml" -print0 2>/dev/null || true)
-        
+
+        # Also check deployment master playbook
+        if [[ -f "deployment/ansible/master_playbook.yml" ]] && command -v ansible-playbook >/dev/null 2>&1; then
+            if ! ansible-playbook --syntax-check "deployment/ansible/master_playbook.yml" >/dev/null 2>&1; then
+                log_error "Ansible syntax error in: deployment/ansible/master_playbook.yml"
+                ((playbook_errors++))
+            fi
+        fi
+
         if [[ $playbook_errors -eq 0 ]]; then
-            log_success "Ansible playbooks have valid syntax"
+            log_success "Deployment Ansible playbooks have valid syntax"
         else
-            log_error "Found $playbook_errors Ansible syntax errors"
+            log_error "Found $playbook_errors Ansible syntax errors in deployment"
             ((issues++))
         fi
     fi
-    
+
+    # Check proxmox-local production playbooks
+    if [[ -d "proxmox-local/ansible/playbooks" ]]; then
+        local production_errors=0
+
+        # Check the production master playbook
+        if [[ -f "proxmox-local/ansible/site.yml" ]] && command -v ansible-playbook >/dev/null 2>&1; then
+            # Check syntax but ignore missing collections (expected in CI)
+            if ! ansible-playbook --syntax-check "proxmox-local/ansible/site.yml" >/dev/null 2>&1; then
+                # Try to determine if it's a missing collection vs real syntax error
+                local syntax_output
+                syntax_output=$(ansible-playbook --syntax-check "proxmox-local/ansible/site.yml" 2>&1 || true)
+                if [[ "$syntax_output" == *"missing collection"* ]] || [[ "$syntax_output" == *"ansibleguy.opnsense"* ]]; then
+                    log_warning "Production playbook needs OPNsense collection (install with: ansible-galaxy collection install ansibleguy.opnsense)"
+                else
+                    log_error "Ansible syntax error in: proxmox-local/ansible/site.yml"
+                    ((production_errors++))
+                fi
+            fi
+        fi
+
+        if [[ $production_errors -eq 0 ]]; then
+            log_success "Production Ansible playbooks have valid syntax"
+        else
+            log_error "Found $production_errors Ansible syntax errors in production"
+            ((issues++))
+        fi
+    fi
+
     if [[ $issues -eq 0 ]]; then
         log_success "Deployment readiness check passed"
         return 0
@@ -225,26 +261,26 @@ validate_deployment_readiness() {
 validate_site() {
     local site_file="$1"
     local site_name="$(basename "$site_file" .yml)"
-    
+
     echo -e "\n${BLUE}=== Validating Site: $site_name ===${NC}"
-    
+
     local errors=0
-    
+
     # YAML syntax
     if ! validate_yaml_syntax "$site_file"; then
         ((errors++))
     else
         log_success "YAML syntax is valid"
     fi
-    
+
     # Site structure
     if ! validate_site_structure "$site_file"; then
         ((errors++))
     fi
-    
+
     # Credentials
     validate_credentials "$site_file"
-    
+
     if [[ $errors -eq 0 ]]; then
         log_success "Site $site_name validation passed"
         return 0
@@ -257,22 +293,22 @@ validate_site() {
 main() {
     local site_name="${1:-}"
     local total_errors=0
-    
+
     echo -e "${BLUE}"
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║              Configuration Validation                       ║"
     echo "║                Proxmox Firewall                             ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
-    
+
     cd "$SCRIPT_DIR"
-    
+
     # Check Python availability
     if ! command -v python3 >/dev/null 2>&1; then
         log_error "Python3 is required for validation"
         exit 1
     fi
-    
+
     # Install required Python packages if needed
     if ! python3 -c "import yaml" 2>/dev/null; then
         log_info "Installing required Python packages..."
@@ -281,7 +317,7 @@ main() {
             exit 1
         }
     fi
-    
+
     if [[ -n "$site_name" ]]; then
         # Validate specific site
         local site_file="config/sites/${site_name}.yml"
@@ -289,7 +325,7 @@ main() {
             log_error "Site configuration not found: $site_file"
             exit 1
         fi
-        
+
         if ! validate_site "$site_file"; then
             ((total_errors++))
         fi
@@ -303,14 +339,14 @@ main() {
                 fi
                 ((site_count++))
             done < <(find config/sites -name "*.yml" -print0 2>/dev/null || true)
-            
+
             if [[ $site_count -eq 0 ]]; then
                 log_warning "No site configurations found in config/sites/"
             fi
         else
             log_warning "No config/sites directory found"
         fi
-        
+
         # Validate example site in test framework
         if [[ -f "docker-test-framework/example-site.yml" ]]; then
             echo -e "\n${BLUE}=== Validating Example Site ===${NC}"
@@ -318,7 +354,7 @@ main() {
                 ((total_errors++))
             fi
         fi
-        
+
         # Validate site template
         if [[ -f "config/site_template.yml" ]]; then
             echo -e "\n${BLUE}=== Validating Site Template ===${NC}"
@@ -327,19 +363,21 @@ main() {
             fi
         fi
     fi
-    
+
     # Check deployment readiness
     echo -e "\n${BLUE}=== Deployment Readiness ===${NC}"
     if ! validate_deployment_readiness; then
         log_warning "Some deployment tools may not be available"
     fi
-    
+
     # Summary
     echo -e "\n${BLUE}=== Validation Summary ===${NC}"
     if [[ $total_errors -eq 0 ]]; then
         log_success "All validations passed! ✓"
         echo -e "\n${GREEN}Your configuration is ready for deployment.${NC}"
-        echo -e "Run: ${BLUE}ansible-playbook deployment/ansible/master_playbook.yml --limit=SITE_NAME${NC}"
+        echo -e "\n${BLUE}Deployment Options:${NC}"
+        echo -e "  CI/Testing: ${BLUE}ansible-playbook deployment/ansible/master_playbook.yml --limit=SITE_NAME${NC}"
+        echo -e "  Production: ${BLUE}cd proxmox-local/ansible && ansible-playbook site.yml --limit=SITE_NAME${NC}"
     else
         log_error "Found $total_errors validation errors"
         echo -e "\n${RED}Please fix the errors before deployment.${NC}"
@@ -353,4 +391,4 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     exit 0
 fi
 
-main "$@" 
+main "$@"

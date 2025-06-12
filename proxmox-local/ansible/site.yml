@@ -1,0 +1,316 @@
+---
+# Proxmox Firewall Production Deployment Master Playbook
+# This playbook orchestrates the complete production deployment including OPNsense configuration
+# It should be run remotely first time, then can be rerun locally for maintenance
+
+- name: Load Site Configuration and Validate Environment
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # Determine site name from inventory or limit
+    site_name: "{{ ansible_limit | default(groups['all'][0].split('-')[0] if groups['all'] else 'site1') }}"
+    site_config_file: "{{ playbook_dir }}/../../config/sites/{{ site_name }}.yml"
+
+  tasks:
+    - name: Display production deployment banner
+      ansible.builtin.debug:
+        msg:
+          - "==================================================="
+          - "Proxmox Firewall Production Deployment"
+          - "==================================================="
+          - "Site: {{ site_name }}"
+          - "Configuration file: {{ site_config_file }}"
+          - "==================================================="
+          - "This playbook will run the complete deployment:"
+          - "1. Basic Proxmox infrastructure setup"
+          - "2. Network configuration and VM deployment"
+          - "3. OPNsense firewall configuration"
+          - "4. Tailscale VPN integration"
+          - "5. Suricata IDS/IPS setup"
+          - "6. Zeek network monitoring deployment"
+          - "7. Backup and monitoring configuration"
+          - "8. Device-specific firewall rules"
+          - "==================================================="
+      tags: always
+
+    - name: Check if site configuration file exists
+      ansible.builtin.stat:
+        path: "{{ site_config_file }}"
+      register: site_config_stat
+
+    - name: Fail if site configuration not found
+      ansible.builtin.fail:
+        msg: |
+          Site configuration file not found: {{ site_config_file }}
+          Please ensure the site configuration exists in config/sites/
+      when: not site_config_stat.stat.exists
+
+    - name: Load site configuration
+      ansible.builtin.include_vars:
+        file: "{{ site_config_file }}"
+        name: full_site_config
+      tags: always
+
+    - name: Extract site configuration
+      ansible.builtin.set_fact:
+        site: "{{ full_site_config.site }}"
+        devices: "{{ full_site_config.devices | default({}) }}"
+      tags: always
+
+    - name: Set global facts for all hosts
+      ansible.builtin.set_fact:
+        site_config: "{{ site }}"
+        site_devices: "{{ devices }}"
+        site_name: "{{ site.name }}"
+        network_prefix: "{{ site.network_prefix }}"
+        domain: "{{ site.domain }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      tags: always
+
+    - name: Create temporary group_vars for compatibility with existing playbooks
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/group_vars"
+        state: directory
+        mode: '0755'
+      tags: always
+
+    - name: Write site configuration to group_vars for individual playbook compatibility
+      ansible.builtin.copy:
+        content: |
+          ---
+          # Generated from {{ site_config_file }}
+          # This ensures compatibility between master playbook and individual playbooks
+
+          site_config: {{ site | to_nice_yaml(indent=2) | indent(2) }}
+
+          # Site devices for firewall rules and device configuration
+          site_devices: {{ devices | to_nice_yaml(indent=2) | indent(2) }}
+
+          # Legacy compatibility variables
+          site_name_from_inventory: "{{ site.name }}"
+
+          # OPNsense API configuration from site config
+          {% if site.credentials is defined %}
+          {% if site.credentials.opnsense_api_key_env is defined %}
+          opnsense_api_key_env: "{{ site.credentials.opnsense_api_key_env }}"
+          {% endif %}
+          {% if site.credentials.opnsense_api_secret_env is defined %}
+          opnsense_api_secret_env: "{{ site.credentials.opnsense_api_secret_env }}"
+          {% endif %}
+          {% endif %}
+        dest: "{{ playbook_dir }}/group_vars/{{ site.name }}.yml"
+        mode: '0644'
+      tags: always
+
+    - name: Build list of required environment variables from site config
+      ansible.builtin.set_fact:
+        required_env_vars: >-
+          {{
+            (site.credentials | default({})).values() |
+            select('string') |
+            select('match', '^[A-Z_]+$') |
+            list +
+            ['TAILSCALE_AUTH_KEY']
+          }}
+      tags: always
+
+    - name: Verify required environment variables
+      ansible.builtin.fail:
+        msg: "Missing required environment variable: {{ item }}"
+      loop: "{{ required_env_vars }}"
+      when: "lookup('env', item) == ''"
+      tags: always
+
+    - name: Display required environment variables status
+      ansible.builtin.debug:
+        msg:
+          - "Required environment variables for {{ site.name }}:"
+          - "{% for var in required_env_vars %}"
+          - "  {{ var }}: {{ '✓ Set' if lookup('env', var) else '✗ Missing' }}"
+          - "{% endfor %}"
+      tags: always
+
+# Infrastructure Setup (referencing deployment playbooks)
+- name: Run basic infrastructure setup
+  import_playbook: ../../deployment/ansible/playbooks/00_configure_repos.yml
+  tags: ['infrastructure', 'repos']
+
+- name: Perform initial Proxmox setup
+  import_playbook: ../../deployment/ansible/playbooks/01_initial_setup.yml
+  tags: ['infrastructure', 'setup']
+
+- name: Configure Terraform API access
+  import_playbook: ../../deployment/ansible/playbooks/02_terraform_api.yml
+  tags: ['infrastructure', 'api']
+
+- name: Set up network transition
+  import_playbook: ../../deployment/ansible/playbooks/03a_network_transition.yml
+  tags: ['infrastructure', 'network']
+
+- name: Configure network bridges and VLANs
+  import_playbook: ../../deployment/ansible/playbooks/03_network_setup.yml
+  tags: ['infrastructure', 'network']
+
+- name: Create VM templates
+  import_playbook: ../../deployment/ansible/playbooks/04_vm_templates.yml
+  tags: ['infrastructure', 'templates']
+
+- name: Deploy VMs with Terraform
+  import_playbook: ../../deployment/ansible/playbooks/05_deploy_vms.yml
+  tags: ['infrastructure', 'vms']
+
+# Production Security Configuration
+- name: Configure OPNsense Firewall
+  import_playbook: playbooks/06_opnsense_setup.yml
+  tags: ['security', 'firewall', 'opnsense']
+  when: site_config.vm_templates.opnsense.enabled | default(true)
+
+- name: Configure Tailscale VPN Integration
+  import_playbook: playbooks/07c_opnsense_tailscale.yml
+  tags: ['security', 'vpn', 'tailscale']
+  when:
+    - site_config.vm_templates.opnsense.enabled | default(true)
+    - site_config.vm_templates.tailscale.enabled | default(true)
+
+- name: Configure Suricata IDS/IPS
+  import_playbook: playbooks/07a_opnsense_suricata.yml
+  tags: ['security', 'ids', 'suricata']
+  when:
+    - site_config.vm_templates.opnsense.enabled | default(true)
+    - site_config.security.suricata.enabled | default(true)
+
+- name: Deploy Zeek Network Monitoring
+  import_playbook: playbooks/07b_zeek_setup.yml
+  tags: ['monitoring', 'zeek']
+  when:
+    - site_config.vm_templates.zeek.enabled | default(true)
+    - site_config.monitoring.enabled | default(true)
+
+# Backup and Monitoring Setup
+- name: Configure Proxmox Backups
+  import_playbook: playbooks/08_proxmox_backups.yml
+  tags: ['backup', 'maintenance']
+
+- name: Apply Hardware Configuration
+  import_playbook: playbooks/apply_hardware_config.yml
+  tags: ['hardware', 'config']
+
+- name: Setup Local Monitoring and Cron Jobs
+  import_playbook: ../../deployment/ansible/playbooks/06_initial_local_setup.yml
+  tags: ['monitoring', 'cron']
+
+# Production Deployment Summary
+- name: Production Deployment Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Load device configurations if they exist
+      ansible.builtin.include_vars:
+        file: "{{ item.value.config_file }}"
+        name: "device_{{ item.key }}"
+      loop: "{{ site_devices | dict2items }}"
+      when:
+        - item.value.config_file is defined
+        - item.value.config_file | length > 0
+      loop_control:
+        label: "{{ item.key }}"
+      failed_when: false
+
+    - name: Wait for services to be fully ready
+      ansible.builtin.pause:
+        seconds: 30
+        prompt: "Waiting for all services to initialize..."
+
+    - name: Test OPNsense connectivity
+      ansible.builtin.uri:
+        url: "https://{{ site_config.network_prefix }}.50.1"
+        method: GET
+        validate_certs: false
+        timeout: 10
+      register: opnsense_test
+      failed_when: false
+      when: site_config.vm_templates.opnsense.enabled | default(true)
+
+    - name: Test Zeek dashboard connectivity
+      ansible.builtin.uri:
+        url: "http://{{ site_config.network_prefix }}.50.4:8888"
+        method: GET
+        timeout: 10
+      register: zeek_test
+      failed_when: false
+      when: site_config.vm_templates.zeek.enabled | default(true)
+
+    - name: Get site VLAN information for summary
+      ansible.builtin.set_fact:
+        site_vlans: "{{ site_config.hardware.network.vlans | default([]) }}"
+        site_vm_templates: "{{ site_config.vm_templates | default({}) }}"
+        site_security_config: "{{ site_config.security | default({}) }}"
+      tags: always
+
+    - name: Production deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "==================================================="
+          - "🎉 PRODUCTION DEPLOYMENT COMPLETE! 🎉"
+          - "==================================================="
+          - "Site: {{ site_config.display_name | default(site_config.name) }}"
+          - "Network: {{ site_config.network_prefix }}.0.0/16"
+          - "Domain: {{ site_config.domain }}"
+          - ""
+          - "🔗 Main Services:"
+          - "  • OPNsense Firewall: https://{{ site_config.network_prefix }}.50.1"
+          - "    └─ Status: {{ '✅ Ready' if opnsense_test.status == 200 else '⚠️  Check connection' }}"
+          - "  • Proxmox Management: https://{{ site_config.proxmox.host }}:8006"
+          - "  • Tailscale VPN: Integrated with OPNsense"
+          - "{% if site_config.vm_templates.zeek.enabled | default(true) %}  • Zeek Dashboard: http://{{ site_config.network_prefix }}.50.4:8888{% endif %}"
+          - "{% if site_config.vm_templates.zeek.enabled | default(true) %}    └─ Status: {{ '✅ Ready' if zeek_test.status == 200 else '⚠️  Check connection' }}{% endif %}"
+          - ""
+          - "🛡️  Security Monitoring:"
+          - "{% if site_config.security.suricata.enabled | default(true) %}  • Suricata IDS/IPS: https://{{ site_config.network_prefix }}.50.1/ui/ids{% endif %}"
+          - "{% if site_config.vm_templates.zeek.enabled | default(true) %}  • Network Analysis: http://{{ site_config.network_prefix }}.50.4:8888{% endif %}"
+          - "  • Firewall Logs: https://{{ site_config.network_prefix }}.50.1/ui/diagnostics/log/firewall"
+          - ""
+          - "🌐 Network Configuration:"
+          - "  • Network Prefix: {{ site_config.network_prefix }}.0.0/16"
+          - "  • Domain: {{ site_config.domain }}"
+          - "  • VLANs Configured: {{ site_vlans | length }}"
+          - "{% for vlan in site_vlans %}"
+          - "    - VLAN {{ vlan.id }} ({{ vlan.name }}): {{ vlan.subnet }}"
+          - "{% endfor %}"
+          - ""
+          - "🏠 Configured Devices ({{ site_devices.keys() | list | length }}):"
+          - "{% for device_name, device in site_devices.items() %}"
+          - "  • {{ device_name }}: {{ device.ip_address | default('DHCP') }} (VLAN {{ device.vlan_id | default('N/A') }})"
+          - "{% endfor %}"
+          - ""
+          - "🖥️  Virtual Machines:"
+          - "{% for vm_name, vm_config in site_vm_templates.items() %}"
+          - "  • {{ vm_name }}: {{ 'Enabled' if vm_config.enabled | default(false) else 'Disabled' }}"
+          - "{% endfor %}"
+          - ""
+          - "💾 Backup & Maintenance:"
+          - "  • Proxmox Backups: {{ 'Enabled' if site_config.backup.enabled | default(false) else 'Disabled' }}"
+          - "  • Log Rotation: Automated"
+          - "  • System Updates: Monitored"
+          - "  • Backup Schedule: {{ site_config.backup.schedule | default('Not configured') }}"
+          - "  • Backup Retention: {{ site_config.backup.retention | default('Not configured') }} days"
+          - ""
+          - "📁 Credentials & Configs:"
+          - "  • API Keys: Stored in environment variables"
+          - "  • Device Configs: {{ playbook_dir }}/../../config/devices/"
+          - "  • Site Config: {{ site_config_file }}"
+          - ""
+          - "🔧 Next Steps:"
+          - "  1. Test firewall rules and connectivity"
+          - "  2. Configure device-specific settings via OPNsense"
+          - "  3. Set up monitoring dashboards"
+          - "  4. Review security policies and VPN access"
+          - ""
+          - "📚 Maintenance:"
+          - "  • Run this playbook periodically for updates"
+          - "  • Use individual playbooks for specific tasks"
+          - "  • Monitor logs in OPNsense and Zeek dashboards"
+          - "==================================================="
+      tags: always

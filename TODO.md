@@ -29,6 +29,7 @@
 
 - Develop the update scripts for the non-package repo VM software.
 - Setup self-running/hosted ansible in proxmox for the various maintenance scripts - reorg ansible to install/(on proxmox) post-install?
+- have firewalls pull local deployment repo to update their ansible/scripts
 - clean up answer file templates [reference](https://pve.proxmox.com/wiki/Automated_Installation)
 - apply_hardware_config.yml needs cleaned up and some sort of loader in proxmox
 - add more missing implemented components to site_template.yml and use it in create_site_config.sh

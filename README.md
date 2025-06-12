@@ -16,6 +16,32 @@
 
 ---
 
+## 🍴 **IMPORTANT: Fork This Repository First!**
+
+> **⚠️ This is an Infrastructure-as-Code project designed for you to fork and customize for your own infrastructure.**
+
+### 🚀 **For New Users:**
+
+1. **🍴 Fork this repository** to your GitHub account (click "Fork" button above)
+2. **📥 Clone your fork** (not this original repository):
+   ```bash
+   git clone https://github.com/YOUR-USERNAME/proxmox-firewall.git
+   cd proxmox-firewall
+   ```
+3. **🔧 Run the setup script** to customize all URLs for your fork:
+   ```bash
+   ./scripts/setup-fork.sh YOUR-USERNAME
+   ```
+4. **⚙️ Configure your sites** and deploy your infrastructure
+
+### 🎯 **Why Fork?**
+- **🔒 Keep your infrastructure private** - Your configurations, credentials, and customizations stay in your fork
+- **🔄 Get updates easily** - Pull improvements from upstream while maintaining your customizations  
+- **🛡️ Security best practice** - Never store sensitive infrastructure data in public repositories
+- **🤝 Contribute back** - Submit improvements via pull requests to help the community
+
+---
+
 ## 🚀 Overview
 
 A comprehensive [Proxmox](https://pve.proxmox.com/wiki/Installation)-based firewall solution featuring **OPNsense**, **Tailscale VPN**, **Omada Controller**, and **Suricata IDS/IPS**. Designed for multi-site deployments with automated provisioning, advanced security monitoring, and enterprise-grade networking capabilities.
@@ -116,10 +142,17 @@ config/sites/site.yml   Direct Processing      TF_VAR_* environment
 - 8GB+ RAM, 50GB+ storage for development
 - Network access for downloading images
 
-### 1. Clone and Setup
+### 1. Fork and Clone Your Repository
 ```bash
-git clone https://github.com/FyberLabs/proxmox-firewall.git
+# First: Fork this repository on GitHub to YOUR-USERNAME/proxmox-firewall
+# Then clone YOUR fork (not the original):
+git clone https://github.com/YOUR-USERNAME/proxmox-firewall.git
 cd proxmox-firewall
+
+# Set up your fork with correct URLs:
+./scripts/setup-fork.sh YOUR-USERNAME
+
+# Configure environment:
 cp env.example .env
 # Edit .env with your configuration
 ```
@@ -167,9 +200,13 @@ For production deployments on physical hardware:
 1. **Install Prerequisites**:
 
    ```bash
-   # Clone your private fork of the repository
-   git clone https://github.com/FyberLabs/proxmox-firewall.git
+   # First: Fork this repository on GitHub to YOUR-USERNAME/proxmox-firewall
+   # Then clone YOUR fork (not the original):
+   git clone https://github.com/YOUR-USERNAME/proxmox-firewall.git
    cd proxmox-firewall
+
+   # Set up your fork with correct URLs:
+   ./scripts/setup-fork.sh YOUR-USERNAME
 
    # Install required packages and Python dependencies
    ./deployment/scripts/prerequisites.sh

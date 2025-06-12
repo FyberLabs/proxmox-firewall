@@ -2,6 +2,91 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.43.0] - 2025-06-12
+
+### Added
+
+#### Documentation & Project Structure
+- **Professional README.md**: Transformed into enterprise-grade open source project format
+  - Added professional badges (License: MIT, CI Status, Ansible, Terraform, Python)
+  - Created comprehensive navigation menu and documentation table
+  - Added architecture diagram with Mermaid visualization
+  - Included benefits section, contributing guidelines, and acknowledgments
+- **Comprehensive Documentation Suite**:
+  - `CONTRIBUTING.md`: Complete contributing guide with development environment setup, code style guidelines, pull request process
+  - `SECURITY.md`: Comprehensive security policy with vulnerability reporting, best practices, and compliance information
+  - `docs/TROUBLESHOOTING.md`: Detailed troubleshooting guide for installation, network, VM, and security issues
+  - `docs/API.md`: Complete API documentation for Proxmox VE, OPNsense, and Tailscale with examples
+  - `docs/README.md`: Documentation index organizing all materials into logical categories
+  - `docs/reference/FAQ.md`: Comprehensive FAQ covering setup, configuration, security, and troubleshooting
+- **GitHub Issue Templates**: Professional issue reporting structure
+  - Bug report template with component selection and environment details
+  - Feature request template with priority and use case sections
+  - Documentation issue template for reporting doc problems
+  - Question/support template for help requests
+  - Pull request template with comprehensive checklists
+  - Configuration file with quick links to resources
+
+#### Scripts & Automation
+- **Fork Setup Script**: `scripts/setup-fork.sh` for easy repository customization
+  - Automatically updates all GitHub URLs to user's fork
+  - Creates backups and provides next steps
+  - Cross-platform compatibility (Linux/macOS)
+- **Script Organization**: Moved `fetch_credentials.sh` from `deployment/scripts/` to `common/scripts/`
+  - Now accessible from both deployment and local operations
+  - Updated all documentation references
+  - Maintains executable permissions
+
+#### Project Infrastructure
+- **MIT License**: Added proper open source license
+- **Contact Information**: Added professional contact channels
+  - General repository inquiries: github@fyberlabs.com
+  - Security issues: security@fyberlabs.com
+  - GitHub Discussions for community support
+- **Domain Updates**: Updated all references from "fyber-labs.com" to "fyberlabs.com"
+- **GitHub URLs**: Updated all repository references to correct FyberLabs organization
+
+### Fixed
+
+#### Configuration & Deployment
+- **Hostname Usage**: Implemented hostname for site config in local ansible
+- **Master Playbook**: Cleaned up the masters mess
+- **Cron Job Loader**: Implemented for local operations
+- **Script References**: Resolved all missing script documentation issues
+
+#### Documentation Consistency
+- **URL Standardization**: All GitHub URLs now point to `https://github.com/FyberLabs/proxmox-firewall`
+- **Script Paths**: All script references now point to correct locations
+- **Contact Information**: Consistent contact details across all documentation
+
+### Changed
+
+#### Project Presentation
+- **Professional Appearance**: README now looks like a professional open source project
+- **Better Organization**: Documentation organized into logical categories with clear navigation
+- **User Experience**: Added "star this repo" call-to-action and professional footer
+- **Community Focus**: Enhanced contributing guidelines and community engagement features
+
+#### Development Workflow
+- **Issue Management**: Structured templates for better issue triage and resolution
+- **Contribution Process**: Clear guidelines for code style, testing, and pull requests
+- **Documentation Standards**: Established standards for maintaining high-quality documentation
+
+### Infrastructure
+
+#### Validation & Testing
+- **Script Validation**: Confirmed all referenced scripts exist and are functional
+  - `./deployment/scripts/prerequisites.sh`
+  - `./deployment/scripts/download_latest_images.sh`
+  - `./deployment/scripts/create_site_config.sh`
+  - `./common/scripts/add_device.sh`
+  - `./common/scripts/fetch_credentials.sh`
+  - `./validate-config.sh`
+  - `./scripts/setup-fork.sh`
+  - `./deployment/scripts/render_template.py`
+- **Configuration Templates**: Extensive device template collection (20+ device types)
+- **Environment Setup**: Proper `env.example` template
+
 ## [Unreleased]
 
 ### Completed Tasks

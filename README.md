@@ -396,6 +396,21 @@ TAILSCALE_AUTH_KEY="your_tailscale_auth_key"
 PRIMARY_PROXMOX_API_SECRET="your_proxmox_api_secret"
 ```
 
+### 🔒 Security Audit
+
+Before deploying or contributing, run the security audit script to ensure no sensitive data is accidentally committed:
+
+```bash
+./common/scripts/security_audit.sh
+```
+
+This script checks for:
+- Comprehensive `.gitignore` patterns
+- Accidentally committed sensitive files  
+- Proper environment variable configuration
+- SSH key permissions
+- Hardcoded secrets in configuration files
+
 ## 🔧 Key Benefits
 
 - **🏗️ Infrastructure as Code**: Complete automation with Ansible and Terraform

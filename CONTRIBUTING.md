@@ -38,6 +38,9 @@ Thank you for your interest in contributing to the Proxmox Firewall project! Thi
 pip install pre-commit
 pre-commit install
 
+# Run security audit to ensure safe setup
+./common/scripts/security_audit.sh
+
 # Run tests to verify setup
 ./validate-config.sh
 ```
@@ -125,6 +128,34 @@ We welcome contributions for:
 - Create examples for new configurations
 - Update CHANGELOG.md with changes
 
+### Security Guidelines
+
+This project handles sensitive infrastructure data. Follow these security practices:
+
+**🔒 Environment Variables:**
+- Never commit `.env` files or secrets
+- Use environment variables for all sensitive data
+- Copy from `env.example` and customize locally
+- Keep SSH keys with 600 permissions
+
+**📋 Pre-Contribution Security Checklist:**
+```bash
+# Run security audit before every commit
+./common/scripts/security_audit.sh
+
+# Verify no sensitive files are staged
+git status --ignored
+
+# Check for accidentally committed secrets
+git log --oneline -p | grep -i "password\|secret\|key" || echo "Clean"
+```
+
+**🚨 If You Accidentally Commit Secrets:**
+1. **DO NOT** just delete the file - it's still in git history
+2. Contact security@fyberlabs.com immediately
+3. Rotate any exposed credentials
+4. Use `git-filter-branch` or BFG to clean history
+
 ### Testing
 
 All contributions must include appropriate tests:
@@ -145,14 +176,24 @@ cd docker-test-framework
 ./validate-config.sh
 ```
 
+**Security Testing:**
+```bash
+# Run before every contribution
+./common/scripts/security_audit.sh
+```
+
 ## 🔄 Pull Request Process
 
 ### Before Submitting
 
-1. **Run all tests** and ensure they pass
-2. **Update documentation** for any new features
-3. **Add/update tests** for your changes
-4. **Run linting tools**:
+1. **Run security audit** to ensure no sensitive data is committed:
+   ```bash
+   ./common/scripts/security_audit.sh
+   ```
+2. **Run all tests** and ensure they pass
+3. **Update documentation** for any new features
+4. **Add/update tests** for your changes
+5. **Run linting tools**:
    ```bash
    ansible-lint ansible/
    terraform fmt -check terraform/

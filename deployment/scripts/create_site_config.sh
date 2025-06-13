@@ -1,4 +1,21 @@
 #!/bin/bash
+# Refactored: Use PROXMOX_FW_CONFIG_ROOT for config path, supporting submodule usage.
+# Set via environment, or auto-detect below.
+
+# Auto-detect config root
+if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
+  if [ -d "vendor/proxmox-firewall/config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
+  elif [ -d "./config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="./config"
+  else
+    echo "ERROR: Could not find config root directory." >&2
+    exit 1
+  fi
+fi
+
+# Use $PROXMOX_FW_CONFIG_ROOT in all config path references below
+
 # create_site_config.sh - Script to configure multi-site Proxmox firewall deployments
 #
 # This script helps create and manage configuration for multiple firewall sites.

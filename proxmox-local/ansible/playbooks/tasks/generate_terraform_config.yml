@@ -5,6 +5,8 @@
 # 2. Setup tfstate backend
 # 3. Handle VM template deployment configuration
 
+# Refactored: Use 'config_root' variable for submodule compatibility if referencing config paths. Set via extra-vars, environment, or auto-detect in scripts.
+
 - name: Create Terraform states directory for site
   ansible.builtin.file:
     path: "{{ playbook_dir }}/../terraform/states/{{ site_config.name }}"

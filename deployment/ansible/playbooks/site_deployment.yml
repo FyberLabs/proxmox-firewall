@@ -2,6 +2,8 @@
 # Site-specific Deployment Playbook
 # This playbook manages the post-boot deployment process for a specific site
 
+# Refactored: Use 'config_root' variable for submodule compatibility if referencing config paths. Set via extra-vars, environment, or auto-detect in scripts.
+
 - name: Site Deployment Configuration
   hosts: all
   gather_facts: false

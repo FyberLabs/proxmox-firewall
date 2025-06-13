@@ -1,4 +1,5 @@
 ---
+# Refactored: Use 'config_root' variable for submodule compatibility if referencing config paths. Set via extra-vars, environment, or auto-detect in scripts.
 - name: Apply Hardware Configuration
   hosts: proxmox
   become: true

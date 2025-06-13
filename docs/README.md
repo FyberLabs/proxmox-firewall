@@ -38,6 +38,8 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 
 ### 🏠 Management
 - **[Local Management](LOCAL_MANAGEMENT.md)** - Automated Proxmox self-management system
+- **[Submodule Integration](SUBMODULE_STRATEGY.md)** – How to use this repo as a submodule in your own project
+- **[Main README: Using as a Submodule](../README.md#-using-as-a-submodule-recommended-for-integrators)** – Quick overview and workflow
 
 ### 🔌 Integration
 - **[API Documentation](API.md)** - API reference for automation

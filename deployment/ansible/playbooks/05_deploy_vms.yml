@@ -3,8 +3,11 @@
   hosts: proxmox
   become: false
   vars:
+    # Refactored: All config paths use the 'config_root' variable for submodule compatibility.
+    # Set 'config_root' via extra-vars, environment, or auto-detect in scripts.
+    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('vendor/proxmox-firewall/config', true) if lookup('file', 'vendor/proxmox-firewall/config', errors='ignore') else './config' }}"
     terraform_dir: "{{ playbook_dir }}/../terraform"
-    config_dir: "{{ playbook_dir }}/../config"
+    config_dir: "{{ config_root }}"
 
   tasks:
     - name: Determine site name from inventory hostname

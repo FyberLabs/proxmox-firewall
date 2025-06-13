@@ -88,4 +88,8 @@ git commit -m "Update proxmox-firewall submodule to v0.44.0"
 
 ---
 
-For questions or suggestions, open an issue or discussion in the [proxmox-firewall repo](https://github.com/FyberLabs/proxmox-firewall). 
+For questions or suggestions, open an issue or discussion in the [proxmox-firewall repo](https://github.com/FyberLabs/proxmox-firewall).
+
+> **See also:**
+> - [Main README: Using as a Submodule](../README.md#-using-as-a-submodule-recommended-for-integrators)
+> - [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (starter repo for new projects) 

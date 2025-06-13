@@ -181,6 +181,35 @@ cd proxmox-local/ansible
 ansible-playbook site.yml --limit=<site_name>
 ```
 
+## 🧩 Using as a Submodule (Recommended for Integrators)
+
+> **This repository is designed to be included as a submodule in your own infrastructure project.**
+
+For most users, forking this repo is sufficient. For advanced users or integrators managing multiple sites or custom infrastructure, we recommend using this repo as a submodule in your own project, keeping all your configuration and secrets in your parent repo.
+
+### Official Project Template
+- See the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (coming soon) for a ready-to-fork project structure with this repo as a submodule and example config.
+
+### Recommended Structure
+```
+my-firewall-project/
+├── config/                # Your site-specific configuration, secrets, inventory, etc.
+├── vendor/
+│   └── proxmox-firewall/  # This repo as a submodule
+├── .env                   # Your environment variables
+└── ...
+```
+
+### Workflow
+- **All your config and secrets stay in your repo**
+- **This repo provides all code, scripts, and automation**
+- **Update the submodule for new features/fixes**
+- **Run scripts from the submodule, passing your config**
+
+### Script Compatibility
+- All scripts/tools support both local config and parent-repo config when used as a submodule.
+- See [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for advanced usage and best practices.
+
 ---
 
 ## 📖 Detailed Installation Guide

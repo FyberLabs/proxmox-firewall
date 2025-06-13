@@ -146,6 +146,19 @@ All notable changes to this project will be documented in this file.
 - **Configuration Templates**: Extensive device template collection (20+ device types)
 - **Environment Setup**: Proper `env.example` template
 
+## [0.45.0] - 2025-06-13
+
+### Added
+- Full support for using this repository as a submodule in downstream projects
+- New [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) for private configuration management
+
+### Changed
+- All scripts, playbooks, and validation tools now use `PROXMOX_FW_CONFIG_ROOT`/`config_root` for config pathing
+- Documentation updated for submodule usage and best practices
+
+### Fixed
+- Pathing issues when running from a parent repo or as a submodule
+
 ## [Unreleased]
 
 ### Completed Tasks

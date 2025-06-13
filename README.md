@@ -16,31 +16,366 @@
 
 ---
 
-## 🍴 **IMPORTANT: Fork This Repository First!**
+## 🚀 Quick Start (Recommended: Template + Submodules)
 
-> **⚠️ This is an Infrastructure-as-Code project designed for you to fork and customize for your own infrastructure.**
+> **This project is designed to be used as a submodule in your own infrastructure repo. Start from the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) for best results.**
 
-### 🚀 **For New Users:**
+### Prerequisites
 
-1. **🍴 Fork this repository** to your GitHub account (click "Fork" button above)
-2. **📥 Clone your fork** (not this original repository):
+- Ubuntu 20.04+ or similar Linux distribution
+- 8GB+ RAM, 50GB+ storage for development
+- Network access for downloading images
+
+### 1. Fork and Clone the Template Repo
+
+```bash
+# Fork the template repo to your GitHub account
+# Then clone your fork:
+git clone https://github.com/YOUR-USERNAME/proxmox-firewall-template.git my-infra-project
+cd my-infra-project
+
+# Initialize submodules (including proxmox-firewall)
+git submodule update --init --recursive
+```
+
+### 2. Configure Your Project
+
+- Place your site configuration, secrets, and inventory in the `config/` directory of your parent repo.
+- Edit `.env` with your environment variables and credentials.
+- Add or update additional submodules (e.g., NAS, K8s, VPN) as needed.
+
+### 3. Install Dependencies
+
+```bash
+./vendor/proxmox-firewall/deployment/scripts/prerequisites.sh
+```
+
+### 4. Create Site Configuration
+
+```bash
+./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
+./vendor/proxmox-firewall/validate-config.sh <site_name>
+```
+
+### 5. Deploy Infrastructure
+
+- **Testing/CI Environment:**
+
+  ```bash
+  ansible-playbook vendor/proxmox-firewall/deployment/ansible/master_playbook.yml --limit=<site_name>
+  ```
+
+- **Production Environment:**
+
+  ```bash
+  cd vendor/proxmox-firewall/proxmox-local/ansible
+  ansible-playbook site.yml --limit=<site_name>
+  ```
+
+---
+
+## 🧩 Submodule Workflow & Best Practices
+
+- **All your config and secrets stay in your repo** (never in the submodule)
+- **Update submodules** for new features/fixes as needed
+- **Run scripts from the submodule, passing your config**
+- See [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for advanced usage
+
+---
+
+## 📖 Detailed Installation Guide (Submodule Workflow)
+
+> **All steps below assume you are using the template repo and proxmox-firewall as a submodule in `vendor/proxmox-firewall/`.**
+
+### 0. Environment Variables
+
+```bash
+cp env.example .env
+```
+
+Edit the `.env` file in your parent repo to set variables for the custom proxmox iso and variables for ansible.
+
+### 1. Install Prerequisites
+
+```bash
+./vendor/proxmox-firewall/deployment/scripts/prerequisites.sh
+```
+
+### 2. Download Latest Images
+
+```bash
+./vendor/proxmox-firewall/deployment/scripts/download_latest_images.sh
+```
+
+### 3. Configure Sites
+
+```bash
+./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
+```
+
+This script will:
+
+- Ask for site details (name, network prefix, domain, Proxmox host)
+- Create external site configuration files (`config/<site_name>.conf`)
+- Create minimal Ansible orchestration settings (`ansible/group_vars/<site_name>.yml`)
+- Update `.env` file with environment variables for Terraform
+- No `.tfvars` files are generated - everything uses environment variables
+
+### 4. Configure Devices
+
+```bash
+./vendor/proxmox-firewall/deployment/scripts/add_device.sh
+```
+
+This script will:
+
+- Help you select device templates
+- Configure device settings
+- Set up DHCP reservations
+- Update firewall rules
+
+### 5. Customize Site and Device Configurations
+
+- Edit site configurations in `config/sites/<site_name>.yml`
+- Modify device configurations in `config/devices/<site_name>/`
+- Update `.env` file with credentials and MAC addresses
+
+```bash
+# Validate your configuration before deployment
+./vendor/proxmox-firewall/validate-config.sh <site_name>
+```
+
+### 6. Create Custom Proxmox ISO
+
+```bash
+ansible-playbook vendor/proxmox-firewall/deployment/ansible/playbooks/create_proxmox_iso.yml
+```
+
+This playbook will:
+
+- Generate a custom Proxmox ISO with site/firewall specific answer files
+- Optionally include hardware-specific configurations
+
+### 7. Deploy Proxmox
+
+```bash
+sudo dd if=proxmox-custom.iso of=/dev/sdX bs=4M status=progress conv=fsync
+
+# Install Proxmox on your hardware
+# - Boot from USB
+# - Installation will proceed automatically
+# - Server will reboot when complete
+```
+
+### 8. Fetch Credentials
+
+The `common/scripts/fetch_credentials.sh` script is used to retrieve and store credentials after deployment:
+
+```bash
+# Fetch credentials for a specific site (run after Proxmox deployment)
+./vendor/proxmox-firewall/common/scripts/fetch_credentials.sh <site_name>
+```
+
+This will:
+
+- Retrieve API tokens and keys from deployed systems
+- Store them securely in the credentials directory
+- Update the .env file with the retrieved values
+
+### 9. Deploy Infrastructure and Configuration
+
+**For CI/Testing and Initial Validation:**
+
+```bash
+# Validate configuration and run tests
+./vendor/proxmox-firewall/validate-config.sh <site_name>
+
+# Deploy basic infrastructure for testing
+ansible-playbook vendor/proxmox-firewall/deployment/ansible/master_playbook.yml --limit=<site_name>
+```
+
+**For Production Deployment (run remotely first time):**
+
+```bash
+# Complete production deployment with OPNsense configuration
+cd vendor/proxmox-firewall/proxmox-local/ansible
+ansible-playbook site.yml --limit=<site_name>
+
+# Or for maintenance (can be run locally on Proxmox server)
+ansible-playbook site.yml --tags maintenance
+```
+
+The production deployment process:
+
+- Loads site configuration from `config/sites/<site_name>.yml`
+- Validates required environment variables from site config
+- Provisions VMs using Terraform (OPNsense, Tailscale, Zeek, etc.)
+- Configures OPNsense firewall with site-specific rules
+- Sets up Tailscale VPN integration
+- Deploys Suricata IDS/IPS and Zeek monitoring
+- Configures automated backups and maintenance
+- Provides comprehensive deployment status report
+
+---
+
+## ⚙️ Configuration Architecture
+
+The system uses a **simplified single-file approach** for maximum user-friendliness:
+
+### Site Configuration Example (`config/sites/<site_name>.yml`)
+
+```yaml
+site:
+  name: "primary"
+  display_name: "Primary Home"
+  network_prefix: "10.1"
+  domain: "primary.local"
+  
+  hardware:
+    network:
+      vlans:
+        - id: 10
+          name: "main"
+          subnet: "10.1.10.0/24"
+        - id: 20
+          name: "cameras"
+          subnet: "10.1.20.0/24"
+  
+  proxmox:
+    host: "192.168.1.100"
+    node_name: "pve"
+    
+  vm_templates:
+    opnsense:
+      enabled: true
+      cores: 4
+      memory: 4096
+    tailscale:
+      enabled: true
+    zeek:
+      enabled: true
+      
+  security:
+    firewall:
+      default_policy: "deny"
+    suricata:
+      enabled: true
+      
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retention: 7
+      
+  credentials:
+    proxmox_api_secret: "PRIMARY_PROXMOX_API_SECRET"
+    tailscale_auth_key: "TAILSCALE_AUTH_KEY"
+
+devices:
+  nas:
+    ip_address: "10.1.10.100"
+    vlan_id: 10
+  camera_nvr:
+    ip_address: "10.1.20.2"
+    vlan_id: 20
+```
+
+### Environment Variables (`.env`)
+
+```bash
+# Global settings
+TAILSCALE_AUTH_KEY="your_tailscale_auth_key"
+
+# Site-specific credentials
+PRIMARY_PROXMOX_API_SECRET="your_proxmox_api_secret"
+```
+
+### 🔒 Security Audit
+
+Before deploying or contributing, run the security audit script to ensure no sensitive data is accidentally committed:
+
+```bash
+./common/scripts/security_audit.sh
+```
+
+This script checks for:
+
+- Comprehensive `.gitignore` patterns
+- Accidentally committed sensitive files  
+- Proper environment variable configuration
+- SSH key permissions
+- Hardcoded secrets in configuration files
+
+### 🏠 Local Management (Post-Deployment)
+
+After initial deployment, set up automated local management on your Proxmox server:
+
+```bash
+# Run on Proxmox server to enable automatic updates from your fork
+./common/scripts/setup_local_management.sh https://github.com/YOUR_USERNAME/proxmox-firewall.git primary
+```
+
+This enables:
+
+- **🔄 Automatic updates** from your GitHub fork (every 15 minutes)
+- **🏗️ Local Terraform state** management
+- **📋 Continuous monitoring** and status reporting
+- **🔒 Secure operation** with all secrets remaining local
+
+See [Local Management Documentation](docs/LOCAL_MANAGEMENT.md) for details.
+
+## 🔧 Key Benefits
+
+- **🏗️ Infrastructure as Code**: Complete automation with Ansible and Terraform
+- **🔒 Security First**: Multi-layered security with comprehensive monitoring
+- **📱 Modern Management**: Web-based dashboards and API access
+- **⚡ Performance**: Optimized for high-throughput networking
+- **🛡️ Reliability**: Automated backups, health checks, and failover
+- **📊 Visibility**: Comprehensive logging and network analysis
+- **🌐 Scalability**: Easy multi-site deployment and management
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for detailed information on:
+
+- Development environment setup
+- Code style guidelines  
+- Pull request process
+- Documentation standards
+- Testing requirements
+
+Quick contribution steps:
+
+1. Fork the repository (for code contributions only)
+2. Create a feature branch
+3. Run tests: `./validate-config.sh`
+4. Submit a pull request to the main repo
+
+---
+
+## 🕰️ Legacy: Manual Forking (Single-Site/Quick Start)
+
+> **This section is for users who want a quick, single-site deployment and do not plan to scale or integrate with other infrastructure.**
+
+### Manual Forking Steps
+
+1. **Fork this repository** to your GitHub account (click "Fork" button above)
+
+2. **Clone your fork**:
+
    ```bash
    git clone https://github.com/YOUR-USERNAME/proxmox-firewall.git
    cd proxmox-firewall
    ```
-3. **🔧 Run the setup script** to customize all URLs for your fork:
+
+3. **Run the setup script** to customize all URLs for your fork:
+
    ```bash
    ./scripts/setup-fork.sh YOUR-USERNAME
    ```
-4. **⚙️ Configure your sites** and deploy your infrastructure
 
-### 🎯 **Why Fork?**
-- **🔒 Keep your infrastructure private** - Your configurations, credentials, and customizations stay in your fork
-- **🔄 Get updates easily** - Pull improvements from upstream while maintaining your customizations  
-- **🛡️ Security best practice** - Never store sensitive infrastructure data in public repositories
-- **🤝 Contribute back** - Submit improvements via pull requests to help the community
+4. **Continue with the rest of the setup as described above, but note that this approach is not recommended for multi-site, multi-component, or GitOps workflows.**
 
----
+> **For detailed development and testing installation instructions (not for production), see [docs/DEVELOPMENT_INSTALL.md](docs/DEVELOPMENT_INSTALL.md).**
 
 ## 🚀 Overview
 
@@ -129,7 +464,7 @@ graph TB
 
 ### Configuration Flow
 
-```
+```text
 Single YAML File → Ansible (Direct Read) → Terraform (Environment Variables)
        ↓                    ↓                        ↓
 config/sites/site.yml   Direct Processing      TF_VAR_* environment
@@ -138,11 +473,13 @@ config/sites/site.yml   Direct Processing      TF_VAR_* environment
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Ubuntu 20.04+ or similar Linux distribution
 - 8GB+ RAM, 50GB+ storage for development
 - Network access for downloading images
 
 ### 1. Fork and Clone Your Repository
+
 ```bash
 # First: Fork this repository on GitHub to YOUR-USERNAME/proxmox-firewall
 # Then clone YOUR fork (not the original):
@@ -158,11 +495,13 @@ cp env.example .env
 ```
 
 ### 2. Install Dependencies
+
 ```bash
 ./deployment/scripts/prerequisites.sh
 ```
 
 ### 3. Create Site Configuration
+
 ```bash
 ./deployment/scripts/create_site_config.sh
 ./validate-config.sh <site_name>
@@ -171,11 +510,13 @@ cp env.example .env
 ### 4. Deploy (Choose One)
 
 **Testing/CI Environment:**
+
 ```bash
 ansible-playbook deployment/ansible/master_playbook.yml --limit=<site_name>
 ```
 
 **Production Environment:**
+
 ```bash
 cd proxmox-local/ansible
 ansible-playbook site.yml --limit=<site_name>
@@ -188,10 +529,12 @@ ansible-playbook site.yml --limit=<site_name>
 For most users, forking this repo is sufficient. For advanced users or integrators managing multiple sites or custom infrastructure, we recommend using this repo as a submodule in your own project, keeping all your configuration and secrets in your parent repo.
 
 ### Official Project Template
+
 - See the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (coming soon) for a ready-to-fork project structure with this repo as a submodule and example config.
 
 ### Recommended Structure
-```
+
+```text
 my-firewall-project/
 ├── config/                # Your site-specific configuration, secrets, inventory, etc.
 ├── vendor/
@@ -201,328 +544,13 @@ my-firewall-project/
 ```
 
 ### Workflow
+
 - **All your config and secrets stay in your repo**
 - **This repo provides all code, scripts, and automation**
 - **Update the submodule for new features/fixes**
 - **Run scripts from the submodule, passing your config**
 
 ### Script Compatibility
+
 - All scripts/tools support both local config and parent-repo config when used as a submodule.
 - See [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for advanced usage and best practices.
-
----
-
-## 📖 Detailed Installation Guide
-
-### Hardware Deployment Process
-
-For production deployments on physical hardware:
-
-0. **Environment Variables**:
-
-  ```bash
-  cp env.example .env
-  ```
-
-  Edit the .env file to set variables for the custom proxmox iso and variables for ansible.
-
-1. **Install Prerequisites**:
-
-   ```bash
-   # First: Fork this repository on GitHub to YOUR-USERNAME/proxmox-firewall
-   # Then clone YOUR fork (not the original):
-   git clone https://github.com/YOUR-USERNAME/proxmox-firewall.git
-   cd proxmox-firewall
-
-   # Set up your fork with correct URLs:
-   ./scripts/setup-fork.sh YOUR-USERNAME
-
-   # Install required packages and Python dependencies
-   ./deployment/scripts/prerequisites.sh
-   ```
-
-2. **Download Latest Images**:
-
-   ```bash
-   # Download and validate latest Ubuntu and OPNsense images
-   ./deployment/scripts/download_latest_images.sh
-   ```
-
-3. **Configure Sites**:
-
-   ```bash
-   # Configure each site (run for each site you want to deploy)
-   ./deployment/scripts/create_site_config.sh
-   ```
-
-   This script will:
-   - Ask for site details (name, network prefix, domain, Proxmox host)
-   - Create external site configuration files (`config/<site_name>.conf`)
-   - Create minimal Ansible orchestration settings (`ansible/group_vars/<site_name>.yml`)
-   - Update `.env` file with environment variables for Terraform
-   - No `.tfvars` files are generated - everything uses environment variables
-
-4. **Configure Devices**:
-
-   ```bash
-   # Add devices for each site (run for each device)
-   ./deployment/scripts/add_device.sh
-   ```
-
-   This script will:
-   - Help you select device templates
-   - Configure device settings
-   - Set up DHCP reservations
-   - Update firewall rules
-
-5. **Customize Site and Device Configurations**:
-
-   - Edit site configurations in `config/sites/<site_name>.yml`
-   - Modify device configurations in `config/devices/<site_name>/`
-   - Update `.env` file with credentials and MAC addresses
-   
-   ```bash
-   # Validate your configuration before deployment
-   ./validate-config.sh <site_name>
-   ```
-
-6. **Create Custom Proxmox ISO**:
-
-   ```bash
-   # Create custom Proxmox ISO with answer file
-   ansible-playbook deployment/ansible/playbooks/create_proxmox_iso.yml
-   ```
-
-   This playbook will:
-   - Generate a custom Proxmox ISO with site/firewall specific answer files
-   - Optionally include hardware-specific configurations
-
-7. **Deploy Proxmox**:
-
-   ```bash
-   # Write ISO to USB drive (replace sdX with your USB device)
-   sudo dd if=proxmox-custom.iso of=/dev/sdX bs=4M status=progress conv=fsync
-
-   # Install Proxmox on your hardware
-   # - Boot from USB
-   # - Installation will proceed automatically
-   # - Server will reboot when complete
-   ```
-
-8. **Fetch Credentials**:
-
-   The `common/scripts/fetch_credentials.sh` script is used to retrieve and store credentials after deployment:
-
-   ```bash
-   # Fetch credentials for a specific site (run after Proxmox deployment)
-   ./common/scripts/fetch_credentials.sh <site_name>
-   ```
-
-   This will:
-   - Retrieve API tokens and keys from deployed systems
-   - Store them securely in the credentials directory
-   - Update the .env file with the retrieved values
-
-9. **Deploy Infrastructure and Configuration**:
-
-   **For CI/Testing and Initial Validation:**
-   ```bash
-   # Validate configuration and run tests
-   ./validate-config.sh <site_name>
-   
-   # Deploy basic infrastructure for testing
-   ansible-playbook deployment/ansible/master_playbook.yml --limit=<site_name>
-   ```
-
-   **For Production Deployment (run remotely first time):**
-   ```bash
-   # Complete production deployment with OPNsense configuration
-   cd proxmox-local/ansible
-   ansible-playbook site.yml --limit=<site_name>
-   
-   # Or for maintenance (can be run locally on Proxmox server)
-   ansible-playbook site.yml --tags maintenance
-   ```
-
-   The production deployment process:
-   - Loads site configuration from `config/sites/<site_name>.yml`
-   - Validates required environment variables from site config
-   - Provisions VMs using Terraform (OPNsense, Tailscale, Zeek, etc.)
-   - Configures OPNsense firewall with site-specific rules
-   - Sets up Tailscale VPN integration
-   - Deploys Suricata IDS/IPS and Zeek monitoring
-   - Configures automated backups and maintenance
-   - Provides comprehensive deployment status report
-
-## ⚙️ Configuration Architecture
-
-The system uses a **simplified single-file approach** for maximum user-friendliness:
-
-### Site Configuration Example (`config/sites/<site_name>.yml`)
-
-```yaml
-site:
-  name: "primary"
-  display_name: "Primary Home"
-  network_prefix: "10.1"
-  domain: "primary.local"
-  
-  hardware:
-    network:
-      vlans:
-        - id: 10
-          name: "main"
-          subnet: "10.1.10.0/24"
-        - id: 20
-          name: "cameras"
-          subnet: "10.1.20.0/24"
-  
-  proxmox:
-    host: "192.168.1.100"
-    node_name: "pve"
-    
-  vm_templates:
-    opnsense:
-      enabled: true
-      cores: 4
-      memory: 4096
-    tailscale:
-      enabled: true
-    zeek:
-      enabled: true
-      
-  security:
-    firewall:
-      default_policy: "deny"
-    suricata:
-      enabled: true
-      
-  backup:
-    enabled: true
-    schedule: "0 2 * * *"
-    retention: 7
-      
-  credentials:
-    proxmox_api_secret: "PRIMARY_PROXMOX_API_SECRET"
-    tailscale_auth_key: "TAILSCALE_AUTH_KEY"
-
-devices:
-  nas:
-    ip_address: "10.1.10.100"
-    vlan_id: 10
-  camera_nvr:
-    ip_address: "10.1.20.2"
-    vlan_id: 20
-```
-
-### Environment Variables (`.env`)
-
-```bash
-# Global settings
-TAILSCALE_AUTH_KEY="your_tailscale_auth_key"
-
-# Site-specific credentials
-PRIMARY_PROXMOX_API_SECRET="your_proxmox_api_secret"
-```
-
-### 🔒 Security Audit
-
-Before deploying or contributing, run the security audit script to ensure no sensitive data is accidentally committed:
-
-```bash
-./common/scripts/security_audit.sh
-```
-
-This script checks for:
-- Comprehensive `.gitignore` patterns
-- Accidentally committed sensitive files  
-- Proper environment variable configuration
-- SSH key permissions
-- Hardcoded secrets in configuration files
-
-### 🏠 Local Management (Post-Deployment)
-
-After initial deployment, set up automated local management on your Proxmox server:
-
-```bash
-# Run on Proxmox server to enable automatic updates from your fork
-./common/scripts/setup_local_management.sh https://github.com/YOUR_USERNAME/proxmox-firewall.git primary
-```
-
-This enables:
-- **🔄 Automatic updates** from your GitHub fork (every 15 minutes)
-- **🏗️ Local Terraform state** management 
-- **📋 Continuous monitoring** and status reporting
-- **🔒 Secure operation** with all secrets remaining local
-
-See [Local Management Documentation](docs/LOCAL_MANAGEMENT.md) for details.
-
-## 🔧 Key Benefits
-
-- **🏗️ Infrastructure as Code**: Complete automation with Ansible and Terraform
-- **🔒 Security First**: Multi-layered security with comprehensive monitoring
-- **📱 Modern Management**: Web-based dashboards and API access
-- **⚡ Performance**: Optimized for high-throughput networking
-- **🛡️ Reliability**: Automated backups, health checks, and failover
-- **📊 Visibility**: Comprehensive logging and network analysis
-- **🌐 Scalability**: Easy multi-site deployment and management
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for detailed information on:
-
-- Development environment setup
-- Code style guidelines  
-- Pull request process
-- Documentation standards
-- Testing requirements
-
-Quick contribution steps:
-1. Fork the repository
-2. **Set up your fork**: Run `./scripts/setup-fork.sh <your-github-username>` to update all URLs
-3. Create a feature branch
-4. Run tests: `./validate-config.sh`
-5. Submit a pull request
-
-### 🍴 Setting Up Your Fork
-
-If you've forked this repository, use our setup script to automatically update all GitHub URLs:
-
-```bash
-# After cloning your fork
-./scripts/setup-fork.sh your-github-username
-
-# This will:
-# - Update all FyberLabs/proxmox-firewall URLs to your-github-username/proxmox-firewall
-# - Create backups of original files
-# - Provide next steps for committing changes
-```
-
-### 📧 Contact
-
-For general repository inquiries, collaboration opportunities, or questions:
-- **Repository Questions**: github@fyberlabs.com
-- **Security Issues**: security@fyberlabs.com
-- **Community Discussions**: [GitHub Discussions](https://github.com/FyberLabs/proxmox-firewall/discussions)
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Proxmox VE](https://www.proxmox.com/) - Virtualization platform
-- [OPNsense](https://opnsense.org/) - Firewall and routing platform
-- [Tailscale](https://tailscale.com/) - VPN mesh networking
-- [Suricata](https://suricata.io/) - Network threat detection
-- [Zeek](https://zeek.org/) - Network security monitoring
-
----
-
-<div align="center">
-
-**⭐ Star this repo if you find it useful! ⭐**
-
-[Report Bug](https://github.com/FyberLabs/proxmox-firewall/issues) • [Request Feature](https://github.com/FyberLabs/proxmox-firewall/issues)
-
-</div>

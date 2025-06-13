@@ -2,6 +2,18 @@
 # Quick Configuration Validation Script
 # Validates site configurations and deployment readiness
 
+# Auto-detect config root
+if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
+  if [ -d "vendor/proxmox-firewall/config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
+  elif [ -d "./config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="./config"
+  else
+    echo "ERROR: Could not find config root directory." >&2
+    exit 1
+  fi
+fi
+
 set -euo pipefail
 
 # Colors
@@ -320,7 +332,7 @@ main() {
 
     if [[ -n "$site_name" ]]; then
         # Validate specific site
-        local site_file="config/sites/${site_name}.yml"
+        local site_file="${PROXMOX_FW_CONFIG_ROOT}/sites/${site_name}.yml"
         if [[ ! -f "$site_file" ]]; then
             log_error "Site configuration not found: $site_file"
             exit 1
@@ -331,34 +343,34 @@ main() {
         fi
     else
         # Validate all sites
-        if [[ -d "config/sites" ]]; then
+        if [[ -d "${PROXMOX_FW_CONFIG_ROOT}/sites" ]]; then
             local site_count=0
             while IFS= read -r -d '' site_file; do
                 if ! validate_site "$site_file"; then
                     ((total_errors++))
                 fi
                 ((site_count++))
-            done < <(find config/sites -name "*.yml" -print0 2>/dev/null || true)
+            done < <(find "${PROXMOX_FW_CONFIG_ROOT}/sites" -name "*.yml" -print0 2>/dev/null || true)
 
             if [[ $site_count -eq 0 ]]; then
-                log_warning "No site configurations found in config/sites/"
+                log_warning "No site configurations found in ${PROXMOX_FW_CONFIG_ROOT}/sites/"
             fi
         else
-            log_warning "No config/sites directory found"
+            log_warning "No ${PROXMOX_FW_CONFIG_ROOT}/sites directory found"
         fi
 
         # Validate example site in test framework
         if [[ -f "docker-test-framework/example-site.yml" ]]; then
             echo -e "\n${BLUE}=== Validating Example Site ===${NC}"
-            if ! validate_site "docker-test-framework/example-site.yml"; then
+            if ! validate_site "${PROXMOX_FW_CONFIG_ROOT}/sites/example-site.yml"; then
                 ((total_errors++))
             fi
         fi
 
         # Validate site template
-        if [[ -f "config/site_template.yml" ]]; then
+        if [[ -f "${PROXMOX_FW_CONFIG_ROOT}/site_template.yml" ]]; then
             echo -e "\n${BLUE}=== Validating Site Template ===${NC}"
-            if ! validate_site "config/site_template.yml"; then
+            if ! validate_site "${PROXMOX_FW_CONFIG_ROOT}/site_template.yml"; then
                 ((total_errors++))
             fi
         fi

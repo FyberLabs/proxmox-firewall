@@ -2,14 +2,18 @@
 # Site Maintenance Playbook
 # This playbook handles regular maintenance tasks for a Proxmox Firewall site
 # It uses the hostname to determine site configuration
+#
+# Refactored: All config paths use the 'config_root' variable for submodule compatibility.
+# Set 'config_root' via extra-vars, environment, or auto-detect in scripts.
 
 - name: Site Maintenance Tasks
   hosts: localhost
   connection: local
   become: true
   vars:
+    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('vendor/proxmox-firewall/config', true) if lookup('file', 'vendor/proxmox-firewall/config', errors='ignore') else './config' }}"
     site_name: "{{ site_name | default(lookup('env', 'HOSTNAME').split('-')[0]) }}"
-    sites_dir: "/opt/proxmox-firewall/config/sites"
+    sites_dir: "{{ config_root }}/sites"
     config_file: "{{ sites_dir }}/{{ site_name }}.yml"
 
   pre_tasks:

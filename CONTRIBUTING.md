@@ -352,3 +352,7 @@ Unacceptable behavior includes harassment, discrimination, or personal attacks. 
 ---
 
 Thank you for contributing to the Proxmox Firewall project! 🎉 
+
+> **Note for Integrators:**
+> 
+> This repository is designed to be included as a submodule in your own infrastructure project. All user-specific configuration and secrets should be kept in your parent repo, not in this codebase. See the [main README section on submodule usage](README.md#-using-as-a-submodule-recommended-for-integrators) and [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for details. For new projects, start from the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (coming soon).

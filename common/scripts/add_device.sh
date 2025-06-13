@@ -12,6 +12,21 @@
 # - Integrates with the multi-site system
 # - Updates Ansible group_vars and environment variables
 
+# Refactored: Use PROXMOX_FW_CONFIG_ROOT for config path, supporting submodule usage.
+# Set via environment, or auto-detect below.
+
+# Auto-detect config root
+if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
+  if [ -d "vendor/proxmox-firewall/config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
+  elif [ -d "./config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="./config"
+  else
+    echo "ERROR: Could not find config root directory." >&2
+    exit 1
+  fi
+fi
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

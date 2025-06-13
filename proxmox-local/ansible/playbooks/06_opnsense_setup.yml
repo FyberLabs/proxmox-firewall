@@ -1,6 +1,9 @@
 ---
 # ansible-lint disable=missing-module
 
+# Refactored: Use 'config_root' variable for submodule compatibility if referencing config paths. Set via extra-vars, environment, or auto-detect in scripts.
+# (No direct config path references in this playbook, but add this note for consistency.)
+
 - name: Configure OPNsense Firewalls
   hosts: opnsense
   gather_facts: true

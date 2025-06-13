@@ -133,6 +133,13 @@ This script will:
 - Configure device settings
 - Set up DHCP reservations
 - Update firewall rules
+- **Create or update device configuration files in `config/devices/<site_name>/` as needed**
+
+**Alternatively, you can manually add device entries directly to your site YAML file (`config/sites/<site_name>.yml`).** This is useful for advanced users, bulk editing, or when you want full control over the device configuration format.
+
+- See [README_DEVICES.md](README_DEVICES.md) for detailed device format, examples, and advanced options for both script-based and manual editing.
+
+> **Tip:** Use the script for ease and guided setup, or edit the YAML directly for advanced scenarios or automation.
 
 ### 5. Customize Site and Device Configurations
 
@@ -220,7 +227,7 @@ The production deployment process:
 
 ## ⚙️ Configuration Architecture
 
-The system uses a **simplified single-file approach** for maximum user-friendliness:
+This site yaml shows a **inline single-file approach** for devices (add_device.sh is recommended see [README_DEVICES](README_DEVICES.md)):
 
 ### Site Configuration Example (`config/sites/<site_name>.yml`)
 
@@ -553,4 +560,6 @@ my-firewall-project/
 ### Script Compatibility
 
 - All scripts/tools support both local config and parent-repo config when used as a submodule.
-- See [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for advanced usage and best practices.
+- See [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for discussion on submodule GitOps and best practices.
+
+> **For detailed instructions on managing and deploying multiple sites, see [README_MULTISITE.md](README_MULTISITE.md).**

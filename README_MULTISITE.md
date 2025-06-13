@@ -4,6 +4,8 @@ This document explains how to use the multi-site deployment features of the Prox
 
 ## Overview
 
+> **See the main [README](README.md) for a high-level overview of multi-site management and project structure. The recommended approach is to use the template repo with proxmox-firewall as a submodule.**
+
 The multi-site deployment system allows you to:
 
 1. Configure and manage multiple firewall sites from a single codebase
@@ -12,6 +14,7 @@ The multi-site deployment system allows you to:
 4. Add new sites without modifying existing deployments
 
 Each site has its own:
+
 - Network prefix (e.g., 10.1.x.x for primary, 10.2.x.x for secondary)
 - Domain name
 - Proxmox host
@@ -20,13 +23,14 @@ Each site has its own:
 
 ## Quick Start
 
-The easiest way to get started is to use the `scripts/create_site_config.sh` script:
+The easiest way to get started is to use the `vendor/proxmox-firewall/deployment/scripts/create_site_config.sh` script:
 
 ```bash
-./scripts/create_site_config.sh
+./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
 ```
 
 This interactive script will:
+
 1. Ask you questions about your site
 2. Create all necessary configuration files
 3. Set up the directory structure
@@ -189,4 +193,4 @@ To add support for additional types of devices or VLANs:
 
 1. Update `ansible/group_vars/all.yml` to include the new VLAN or device types
 2. Ensure any templates or tasks that configure these devices are updated
-3. Redeploy to your sites 
+3. Redeploy to your sites

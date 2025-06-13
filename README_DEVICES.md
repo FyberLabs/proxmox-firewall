@@ -4,6 +4,8 @@ This document explains how to use the device configuration system to add and man
 
 ## Overview
 
+> **See the main [README](README.md) for a high-level overview of device management, and where to find/add device configs in your project structure.**
+
 The device configuration system allows you to:
 
 1. Define device templates with standardized configurations using Jinja2

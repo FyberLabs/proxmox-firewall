@@ -20,6 +20,7 @@ my-firewall-project/
 │   ├── secrets/
 │   └── ...
 ├── vendor/
+│   ├── other-infrastructure/ #Other submodule with terraform, ansible, etc.
 │   └── proxmox-firewall/  # This repo as a submodule
 ├── README.md
 └── ...
@@ -28,6 +29,54 @@ my-firewall-project/
 - **Your repo** contains all configuration, secrets, and inventory.
 - **This repo** (as a submodule) provides all automation, scripts, playbooks, and tools.
 - **No user-specific config** should be added to the submodule.
+
+---
+
+## 📊 Submodule-Based GitOps Architecture
+
+```mermaid
+flowchart TD
+    A["Your Infra Repo (Template)"]
+    subgraph Submodules
+        B["proxmox-firewall (submodule)"]
+        C["other-infrastructure (submodule)"]
+        D["nas-deployment (submodule)"]
+        E["k8s-cluster (submodule)"]
+    end
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F["config/ (your secrets, inventory, site config)"]
+    A --> G[".env (your environment variables)"]
+    A --> H["GitOps/CI/CD (ArgoCD, Flux, GitHub Actions, etc.)"]
+    H --> A
+    style A fill:#e0eaff,stroke:#0366d6,stroke-width:2px
+    style B fill:#fff,stroke:#d6d6d6
+    style C fill:#fff,stroke:#d6d6d6
+    style D fill:#fff,stroke:#d6d6d6
+    style E fill:#fff,stroke:#d6d6d6
+    style F fill:#eaffea,stroke:#28a745
+    style G fill:#eaffea,stroke:#28a745
+    style H fill:#fffbe6,stroke:#ffd33d
+```
+
+## Submodules for Config Isolation & GitOps
+
+Using submodules for your infrastructure code enables strong separation of concerns and is a best practice for GitOps:
+
+- **Config Isolation:** All your secrets, site-specific configuration, and inventory are kept in your parent repo, never in the submodule. This means you can safely update, replace, or even publicly share the submodule without risk of leaking sensitive data.
+- **Composable Infrastructure:** You can add multiple submodules (firewall, NAS, K8s, VPN, etc.) to your parent repo, each providing automation for a different part of your stack. This makes your infrastructure modular and easy to extend.
+- **GitOps-Ready:** The parent repo (with all config and submodules) is the single source of truth. You can use GitOps tools like ArgoCD, Flux, or GitHub Actions to automatically deploy, audit, and roll back infrastructure changes. All changes are tracked, reviewable, and auditable in git.
+- **Safe Upgrades:** You can update submodules independently of your configuration, and pin them to specific versions/tags for stability.
+- **Collaboration:** Teams can work on infrastructure code (submodules) and configuration (parent repo) independently, with clear boundaries and no risk of merge conflicts or config drift.
+
+**In summary:**
+- Your parent repo = your config, secrets, and GitOps pipeline
+- Submodules = reusable, upgradable automation engines
+- All changes are tracked and auditable in git, enabling true GitOps workflows
+
+---
 
 ## Workflow
 

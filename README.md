@@ -38,35 +38,43 @@ cd my-infra-project
 git submodule update --init --recursive
 ```
 
-### 2. Configure Your Project
-
-- Place your site configuration, secrets, and inventory in the `config/` directory of your parent repo.
-- Edit `.env` with your environment variables and credentials.
-- Add or update additional submodules (e.g., NAS, K8s, VPN) as needed.
-
-### 3. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
 ./vendor/proxmox-firewall/deployment/scripts/prerequisites.sh
 ```
 
-### 4. Create Site Configuration
+### 3. Create Site Configuration
 
 ```bash
 ./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
 ./vendor/proxmox-firewall/validate-config.sh <site_name>
 ```
 
+### 4. Configure Your Project
+
+- Place your site configuration, secrets, and inventory in the `config/` directory of your parent repo (if not already created by the script).
+- Edit `.env` with your environment variables and credentials.
+- Add or update additional submodules (e.g., NAS, K8s, VPN) as needed.
+
+> **Note:** This order ensures all scripts and configuration files exist before you edit or customize them, reducing errors and confusion for new users.
+
 ### 5. Deploy Infrastructure
 
-- **Testing/CI Environment:**
+- **Install the custom Proxmox ISO** you created earlier on your hardware:
+  - Write the ISO to a USB drive and boot your server from it
+  - Complete the Proxmox installation process
+
+- **After Proxmox is installed and online, deploy your site configuration with Ansible:**
+
+  **Testing/CI Environment:**
 
   ```bash
   ansible-playbook vendor/proxmox-firewall/deployment/ansible/master_playbook.yml --limit=<site_name>
   ```
 
-- **Production Environment:**
-
+  **Production Environment:**
+  
   ```bash
   cd vendor/proxmox-firewall/proxmox-local/ansible
   ansible-playbook site.yml --limit=<site_name>

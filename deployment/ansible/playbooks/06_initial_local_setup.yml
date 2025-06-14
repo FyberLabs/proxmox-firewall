@@ -5,7 +5,7 @@
   vars:
     # Refactored: All config paths use the 'config_root' variable for submodule compatibility.
     # Set 'config_root' via extra-vars, environment, or auto-detect in scripts.
-    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('vendor/proxmox-firewall/config', true) if lookup('file', 'vendor/proxmox-firewall/config', errors='ignore') else './config' }}"
+    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('./config', true) }}"
     sites_dir: "{{ config_root }}/sites"
     devices_dir: "{{ config_root }}/devices"
     ansible_user: ansible

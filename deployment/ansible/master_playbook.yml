@@ -11,7 +11,7 @@
   gather_facts: false
   vars:
     # Determine config root (override with -e or env)
-    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('vendor/proxmox-firewall/config', true) if lookup('file', 'vendor/proxmox-firewall/config', errors='ignore') else './config' }}"
+    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('./config', true) }}"
     site_name: "{{ ansible_limit | default(groups['all'][0].split('-')[0] if groups['all'] else 'site1') }}"
     site_config_file: "{{ config_root }}/sites/{{ site_name }}.yml"
 

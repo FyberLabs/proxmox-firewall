@@ -4,10 +4,14 @@
 
 # Patch: Use parent repo's config directory by default, unless PROXMOX_FW_CONFIG_ROOT is set
 if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
-  # Default to parent repo's config directory (../config from script location)
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-  export PROXMOX_FW_CONFIG_ROOT="${PROJECT_ROOT}/config"
+  if [ -d "./config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="./config"
+  elif [ -d "vendor/proxmox-firewall/config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
+  else
+    echo "ERROR: Could not find config root directory." >&2
+    exit 1
+  fi
 fi
 
 # Use $PROXMOX_FW_CONFIG_ROOT in all config path references below

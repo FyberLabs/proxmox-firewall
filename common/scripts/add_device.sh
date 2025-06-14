@@ -17,20 +17,14 @@
 
 # Auto-detect config root
 if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
-  if [ -d "./config" ]; then
-    export PROXMOX_FW_CONFIG_ROOT="./config"
-  elif [ -d "vendor/proxmox-firewall/config" ]; then
-    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
-  else
-    echo "ERROR: Could not find config root directory." >&2
-    exit 1
-  fi
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PARENT_REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+    export PROXMOX_FW_CONFIG_ROOT="${PARENT_REPO_ROOT}/config"
 fi
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 cd "$PROJECT_ROOT"
 CONFIG_DIR="${PROJECT_ROOT}/config"
 SITES_DIR="${CONFIG_DIR}/sites"

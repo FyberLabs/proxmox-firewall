@@ -24,7 +24,7 @@
       delegate_to: localhost
       become: false
       ansible.builtin.include_vars:
-        file: "{{ config_dir }}/{{ site_name_from_inventory }}.conf"
+        file: "{{ config_root }}/sites/{{ site_name_from_inventory }}.yml"
         name: site_env_vars
       failed_when: false
       register: site_config_load

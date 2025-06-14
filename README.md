@@ -477,13 +477,7 @@ Single YAML File → Ansible (Direct Read) → Terraform (Environment Variables)
 config/sites/site.yml   Direct Processing      TF_VAR_* environment
 ```
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Ubuntu 20.04+ or similar Linux distribution
-- 8GB+ RAM, 50GB+ storage for development
-- Network access for downloading images
+## 🚀 Fork based deployment (only for development or testing)
 
 ### 1. Fork and Clone Your Repository
 

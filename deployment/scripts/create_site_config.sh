@@ -2,16 +2,12 @@
 # Refactored: Use PROXMOX_FW_CONFIG_ROOT for config path, supporting submodule usage.
 # Set via environment, or auto-detect below.
 
-# Auto-detect config root
+# Patch: Use parent repo's config directory by default, unless PROXMOX_FW_CONFIG_ROOT is set
 if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
-  if [ -d "vendor/proxmox-firewall/config" ]; then
-    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
-  elif [ -d "./config" ]; then
-    export PROXMOX_FW_CONFIG_ROOT="./config"
-  else
-    echo "ERROR: Could not find config root directory." >&2
-    exit 1
-  fi
+  # Default to parent repo's config directory (../config from script location)
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  export PROXMOX_FW_CONFIG_ROOT="${PROJECT_ROOT}/config"
 fi
 
 # Use $PROXMOX_FW_CONFIG_ROOT in all config path references below
@@ -30,7 +26,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-CONFIG_DIR="${PROJECT_ROOT}/config/sites"
+CONFIG_DIR="${PROXMOX_FW_CONFIG_ROOT}/sites"
 ANSIBLE_GROUP_VARS_DIR="${SCRIPT_DIR}/ansible/group_vars"
 TERRAFORM_DIR="${SCRIPT_DIR}/terraform"
 TERRAFORM_STATES_DIR="${TERRAFORM_DIR}/states"

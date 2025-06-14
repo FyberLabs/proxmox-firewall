@@ -12,9 +12,7 @@ from pathlib import Path
 # Refactored: Use PROXMOX_FW_CONFIG_ROOT for config path, supporting submodule usage.
 PROXMOX_FW_CONFIG_ROOT = os.environ.get('PROXMOX_FW_CONFIG_ROOT')
 if not PROXMOX_FW_CONFIG_ROOT:
-    if os.path.isdir('vendor/proxmox-firewall/config'):
-        PROXMOX_FW_CONFIG_ROOT = 'vendor/proxmox-firewall/config'
-    elif os.path.isdir('./config'):
+    if os.path.isdir('./config'):
         PROXMOX_FW_CONFIG_ROOT = './config'
     else:
         raise RuntimeError('Could not find config root directory.')

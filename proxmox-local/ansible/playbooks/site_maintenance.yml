@@ -11,7 +11,7 @@
   connection: local
   become: true
   vars:
-    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('vendor/proxmox-firewall/config', true) if lookup('file', 'vendor/proxmox-firewall/config', errors='ignore') else './config' }}"
+    config_root: "{{ lookup('env', 'PROXMOX_FW_CONFIG_ROOT') | default('./config', true) }}"
     site_name: "{{ site_name | default(lookup('env', 'HOSTNAME').split('-')[0]) }}"
     sites_dir: "{{ config_root }}/sites"
     config_file: "{{ sites_dir }}/{{ site_name }}.yml"

@@ -4,10 +4,10 @@
 
 # Auto-detect config root
 if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
-  if [ -d "vendor/proxmox-firewall/config" ]; then
-    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
-  elif [ -d "./config" ]; then
+  if [ -d "./config" ]; then
     export PROXMOX_FW_CONFIG_ROOT="./config"
+  elif [ -d "vendor/proxmox-firewall/config" ]; then
+    export PROXMOX_FW_CONFIG_ROOT="vendor/proxmox-firewall/config"
   else
     echo "ERROR: Could not find config root directory." >&2
     exit 1

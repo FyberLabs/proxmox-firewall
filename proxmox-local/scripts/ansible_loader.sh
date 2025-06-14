@@ -7,10 +7,10 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export ANSIBLE_CONFIG="/opt/proxmox-firewall/ansible/ansible.cfg"
 
 # Detect config root (submodule or standalone)
-if [ -d "/opt/proxmox-firewall/vendor/proxmox-firewall/config" ]; then
-  export PROXMOX_FW_CONFIG_ROOT="/opt/proxmox-firewall/vendor/proxmox-firewall/config"
-elif [ -d "/opt/proxmox-firewall/config" ]; then
+if [ -d "/opt/proxmox-firewall/config" ]; then
   export PROXMOX_FW_CONFIG_ROOT="/opt/proxmox-firewall/config"
+elif [ -d "/opt/proxmox-firewall/vendor/proxmox-firewall/config" ]; then
+  export PROXMOX_FW_CONFIG_ROOT="/opt/proxmox-firewall/vendor/proxmox-firewall/config"
 else
   echo "ERROR: Could not find config root directory." >&2
   exit 1

@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.46.0] - 2025-06-14
+
+### Added
+- **Submodule/Template Workflow as Default:**
+  - All documentation now recommends the template + submodule approach for scalable, GitOps-ready deployments.
+  - Forking/manual setup is now legacy/for development only.
+- **Multi-Site Management Documentation Overhaul:**
+  - Complete rewrite of `README_MULTISITE.md` for modern, multi-site workflows.
+  - Clear directory structure, site config examples, and step-by-step deployment instructions.
+  - Best practices for scaling, GitOps, and per-site config isolation.
+- **Device Management and Cross-References:**
+  - Improved device configuration workflow in README and `README_DEVICES.md`.
+  - Added cross-references between device, multi-site, and main docs.
+- **Proxmox Answer File Documentation:**
+  - New `docs/PROXMOX_ANSWER_FILE.md` explains the answer file format, fields, and customization.
+  - Linked from install guides and main README.
+- **Sample Network Diagrams:**
+  - Added Mermaid diagrams for VLANs and device mapping in README.
+  - Visualizes typical multi-VLAN, multi-device deployments.
+- **Improved Cross-References:**
+  - All major docs now link to each other for easier onboarding and navigation.
+
+### Changed
+- **Quick Start and Installation Sections:**
+  - Reordered for clarity: install dependencies, create site config, then configure project.
+  - All examples use submodule paths and modern workflow.
+- **Legacy/Manual Installation:**
+  - Moved to `docs/DEVELOPMENT_INSTALL.md` and clearly marked as not for production.
+- **Troubleshooting and FAQ:**
+  - Validated all referenced commands and examples for accuracy.
+  - Added notes for submodule pathing where needed.
+
+### Fixed
+- **Documentation Consistency:**
+  - Ensured all references, script paths, and examples are up to date with the new workflow.
+
+> **This release is a major documentation and onboarding update, making multi-site, multi-device, and GitOps workflows the default and best-documented path for all users.**
+
 ## [0.44.0] - 2025-06-12
 
 ### Added

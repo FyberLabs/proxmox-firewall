@@ -65,6 +65,8 @@ git submodule update --init --recursive
   - Write the ISO to a USB drive and boot your server from it
   - Complete the Proxmox installation process
 
+> **See [docs/PROXMOX_ANSWER_FILE.md](docs/PROXMOX_ANSWER_FILE.md) for details on the answer file format, fields, and customization.**
+
 - **After Proxmox is installed and online, deploy your site configuration with Ansible:**
 
   **Testing/CI Environment:**
@@ -565,3 +567,79 @@ my-firewall-project/
 - See [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for discussion on submodule GitOps and best practices.
 
 > **For detailed instructions on managing and deploying multiple sites, see [README_MULTISITE.md](README_MULTISITE.md).**
+
+## 🖼️ Sample Network Diagrams
+
+Below are example network diagrams to help you visualize a typical multi-VLAN Proxmox Firewall deployment and device layout. You can adapt these to your own site and device plan.
+
+### 1. Site-Level Network Diagram
+
+```mermaid
+flowchart TD
+    subgraph Site_Network["Site: Example Home Network"]
+        WAN["WAN (ISP)"]
+        FW["OPNsense Firewall<br/>vmbr0 (WAN)"]
+        SW["Switch"]
+        LAN["LAN VLAN 10<br/>vmbr1.10"]
+        CAM["Cameras VLAN 20<br/>vmbr1.20"]
+        IOT["IoT VLAN 30<br/>vmbr1.30"]
+        GUEST["Guest VLAN 40<br/>vmbr1.40"]
+        MGMT["Mgmt VLAN 50<br/>vmbr1.50"]
+        NAS["NAS<br/>10.1.10.10"]
+        PC["Desktop PC<br/>10.1.10.20"]
+        CAM1["Camera 1<br/>10.1.20.10"]
+        IOT1["IoT Device 1<br/>10.1.30.10"]
+        GUEST1["Guest Device<br/>10.1.40.10"]
+        MGMT1["Proxmox Host Mgmt<br/>10.1.50.1"]
+    end
+    WAN --> FW
+    FW --> SW
+    SW --> LAN
+    SW --> CAM
+    SW --> IOT
+    SW --> GUEST
+    SW --> MGMT
+    LAN --> NAS
+    LAN --> PC
+    CAM --> CAM1
+    IOT --> IOT1
+    GUEST --> GUEST1
+    MGMT --> MGMT1
+    style FW fill:#e0eaff,stroke:#0366d6,stroke-width:2px
+    style SW fill:#fffbe6,stroke:#ffd33d
+    style LAN fill:#eaffea,stroke:#28a745
+    style CAM fill:#ffeaea,stroke:#d63333
+    style IOT fill:#eafffa,stroke:#33d6b3
+    style GUEST fill:#f0eaff,stroke:#7d33d6
+    style MGMT fill:#eaf0ff,stroke:#3366d6
+```
+
+### 2. VLAN/Device Mapping Diagram
+
+```mermaid
+flowchart TD
+    subgraph VLANs["VLANs and Devices"]
+        LAN["VLAN 10: LAN<br/>10.1.10.0/24"]
+        CAM["VLAN 20: Cameras<br/>10.1.20.0/24"]
+        IOT["VLAN 30: IoT<br/>10.1.30.0/24"]
+        GUEST["VLAN 40: Guest<br/>10.1.40.0/24"]
+        MGMT["VLAN 50: Mgmt<br/>10.1.50.0/24"]
+        NAS["NAS<br/>10.1.10.10"]
+        PC["Desktop PC<br/>10.1.10.20"]
+        CAM1["Camera 1<br/>10.1.20.10"]
+        IOT1["IoT Device 1<br/>10.1.30.10"]
+        GUEST1["Guest Device<br/>10.1.40.10"]
+        MGMT1["Proxmox Host Mgmt<br/>10.1.50.1"]
+    end
+    LAN --> NAS
+    LAN --> PC
+    CAM --> CAM1
+    IOT --> IOT1
+    GUEST --> GUEST1
+    MGMT --> MGMT1
+    style LAN fill:#eaffea,stroke:#28a745
+    style CAM fill:#ffeaea,stroke:#d63333
+    style IOT fill:#eafffa,stroke:#33d6b3
+    style GUEST fill:#f0eaff,stroke:#7d33d6
+    style MGMT fill:#eaf0ff,stroke:#3366d6
+```

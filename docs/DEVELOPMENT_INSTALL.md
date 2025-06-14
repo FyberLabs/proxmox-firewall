@@ -60,6 +60,8 @@ cd proxmox-firewall
 ansible-playbook deployment/ansible/playbooks/create_proxmox_iso.yml
 ```
 
+> **See [PROXMOX_ANSWER_FILE.md](PROXMOX_ANSWER_FILE.md) for details on the answer file format, fields, and customization.**
+
 ### 7. Deploy Proxmox
 
 ```bash

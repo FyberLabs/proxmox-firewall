@@ -1,5 +1,7 @@
 # Troubleshooting Guide
 
+> **Note:** If you are using the submodule/template workflow, prefix all script paths in this guide with `vendor/proxmox-firewall/` (e.g., `./vendor/proxmox-firewall/validate-config.sh`).
+
 This guide covers common issues and their solutions for the Proxmox Firewall project.
 
 ## 🚀 Quick Diagnostics
@@ -7,7 +9,7 @@ This guide covers common issues and their solutions for the Proxmox Firewall pro
 ### System Health Check
 ```bash
 # Run comprehensive validation
-./validate-config.sh
+./vendor/proxmox-firewall/validate-config.sh
 
 # Check Ansible connectivity
 ansible all -m ping -i deployment/ansible/inventory/

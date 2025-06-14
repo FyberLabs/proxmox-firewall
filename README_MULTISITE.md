@@ -1,196 +1,168 @@
-# Multi-Site Deployment for Proxmox Firewall
+# Multi-Site Deployment Guide (Modern Workflow)
 
-This document explains how to use the multi-site deployment features of the Proxmox Firewall project.
+This guide explains how to manage and deploy multiple firewall sites using the recommended **template + submodule** approach with Proxmox Firewall.
 
-## Overview
-
-> **See the main [README](README.md) for a high-level overview of multi-site management and project structure. The recommended approach is to use the template repo with proxmox-firewall as a submodule.**
-
-The multi-site deployment system allows you to:
-
-1. Configure and manage multiple firewall sites from a single codebase
-2. Keep site-specific configuration separate from common code
-3. Deploy and manage sites independently
-4. Add new sites without modifying existing deployments
-
-Each site has its own:
-
-- Network prefix (e.g., 10.1.x.x for primary, 10.2.x.x for secondary)
-- Domain name
-- Proxmox host
-- Terraform state
-- Device-specific configurations
-
-## Quick Start
-
-The easiest way to get started is to use the `vendor/proxmox-firewall/deployment/scripts/create_site_config.sh` script:
-
-```bash
-./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
-```
-
-This interactive script will:
-
-1. Ask you questions about your site
-2. Create all necessary configuration files
-3. Set up the directory structure
-4. Provide commands for deployment
-
-## Manual Configuration
-
-If you prefer to configure sites manually:
-
-### 1. Create site configuration files
-
-For each site, create a file in `config/site_name.conf`:
-
-```bash
-SITE_NAME="primary"
-SITE_DISPLAY_NAME="Primary Home"
-NETWORK_PREFIX="10.1"
-DOMAIN="primary.local"
-PROXMOX_HOST="10.1.50.1"
-```
-
-### 2. Create Terraform variable files
-
-For each site, create a file in `terraform/site_name.tfvars`:
-
-```hcl
-# Terraform variables for Primary Home
-proxmox_host = "10.1.50.1"
-
-# Site configuration
-site_name = "primary"
-site_display_name = "Primary Home"
-network_prefix = "10.1"
-domain = "primary.local"
-
-# Common configuration
-timezone = "America/New_York"
-target_node = "pve"
-```
-
-### 3. Create Ansible group variables
-
-For each site, create a file in `ansible/group_vars/site_name.yml`:
-
-```yaml
 ---
-# Site-specific variables for Primary Home
-site_config:
-  name: "primary"
-  display_name: "Primary Home"
-  network_prefix: "10.1"
-  domain: "primary.local"
+
+## 🚀 Overview
+
+- **Multi-site support** lets you manage any number of sites (locations, offices, homes, etc.) from a single infrastructure repository.
+- **Recommended workflow:** Use the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) as your parent repo, with `proxmox-firewall` as a submodule in `vendor/`.
+- **All site-specific configuration** lives in `config/sites/` and `config/devices/` in your parent repo. The submodule contains only code, playbooks, and templates.
+
+> **See the [main README](README.md) for a high-level overview and project structure.**
+
+---
+
+## 🗂️ Example Directory Structure
+
+```
+my-infra-project/
+├── config/
+│   ├── sites/
+│   │   ├── primary.yml
+│   │   └── branch-office.yml
+│   ├── devices/
+│   │   ├── primary/
+│   │   │   └── ...
+│   │   └── branch-office/
+│   │       └── ...
+│   └── secrets/
+├── .env
+├── vendor/
+│   └── proxmox-firewall/   # Submodule
+├── README.md
+└── ...
 ```
 
-### 4. Update Ansible inventory
+---
 
-Add each site to your `ansible/inventory/hosts.yml`:
+## 📝 Example Site Configs
 
+`config/sites/primary.yml`:
 ```yaml
-all:
-  children:
-    firewalls:
-      children:
-        primary:
-          hosts:
-            primary_firewall:
-              ansible_host: "10.1.50.1"
-              ansible_user: root
-        
-        secondary:
-          hosts:
-            secondary_firewall:
-              ansible_host: "10.2.50.1"
-              ansible_user: root
+site:
+  name: primary
+  display_name: "Primary Home"
+  network_prefix: 10.1
+  domain: primary.local
+  proxmox:
+    host: 10.1.50.1
+    node_name: pve
+    storage_pool: local-lvm
+    template_storage: local
+  timezone: America/New_York
+  # ... other site-specific settings ...
 ```
 
-## Deployment Process
+`config/sites/branch-office.yml`:
+```yaml
+site:
+  name: branch-office
+  display_name: "Branch Office"
+  network_prefix: 10.2
+  domain: branch.local
+  proxmox:
+    host: 10.2.50.1
+    node_name: pve
+    storage_pool: local-lvm
+    template_storage: local
+  timezone: America/Chicago
+  # ... other site-specific settings ...
+```
 
-### First-time setup for a site
+---
 
-1. Initialize Terraform with the site-specific state path:
+## ➕ Adding a New Site
 
+1. **Create a new site config:**
+   - Use the script for guided setup:
+     ```bash
+     ./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
+     ```
+   - Or copy and edit an existing file in `config/sites/`.
+2. **Add device configs:**
+   - Use the device script or edit YAML in `config/devices/<site_name>/`.
+   - See [README_DEVICES.md](README_DEVICES.md) for details.
+3. **Add any site-specific secrets to `.env`** (see below).
+
+---
+
+## 🚀 Deploying or Updating a Single Site
+
+1. **Validate your config:**
+   ```bash
+   ./vendor/proxmox-firewall/validate-config.sh <site_name>
+   ```
+2. **Create the custom Proxmox ISO:**
+   ```bash
+   ansible-playbook vendor/proxmox-firewall/deployment/ansible/playbooks/create_proxmox_iso.yml -e site_name=<site_name>
+   ```
+3. **Install the ISO on your hardware.**
+4. **Deploy the site with Ansible:**
+   - For CI/testing:
+     ```bash
+     ansible-playbook vendor/proxmox-firewall/deployment/ansible/master_playbook.yml --limit=<site_name>
+     ```
+   - For production:
+     ```bash
+     cd vendor/proxmox-firewall/proxmox-local/ansible
+     ansible-playbook site.yml --limit=<site_name>
+     ```
+
+---
+
+## 🔄 Updating All Sites
+
+- Make your code or template changes in the submodule.
+- Validate and deploy to each site as above, one at a time.
+- Use git branches or PRs for safe updates.
+
+---
+
+## 🛠️ Environment Variables and Per-Site Overrides
+
+- The `.env` file in your parent repo holds secrets and credentials.
+- For per-site values, use a naming convention like `PRIMARY_PROXMOX_HOST`, `BRANCH_OFFICE_PROXMOX_HOST`, etc.
+- Scripts and playbooks will pick up the correct values based on the site name.
+
+Example:
 ```bash
-cd terraform
-terraform init -backend-config="path=states/primary/terraform.tfstate"
+# .env
+PRIMARY_PROXMOX_HOST=10.1.50.1
+BRANCH_OFFICE_PROXMOX_HOST=10.2.50.1
+PRIMARY_ADMIN_EMAIL=admin@primary.local
+BRANCH_OFFICE_ADMIN_EMAIL=admin@branch.local
 ```
 
-2. Apply Terraform with the site-specific variables:
+---
 
-```bash
-terraform apply -var-file="primary.tfvars"
-```
+## 💡 Best Practices for Multi-Site & GitOps
 
-3. Run Ansible for the site:
+- **Keep all site configs and secrets out of the submodule.**
+- **Use a consistent VLAN and network design** across sites for easier management.
+- **Pin the submodule** to a known-good release for stability.
+- **Test changes on one site** before rolling out to all.
+- **Use GitOps tools** (ArgoCD, Flux, GitHub Actions) to automate deployments.
+- **Back up your config and state** regularly.
 
-```bash
-cd ..
-ansible-playbook ansible/master_playbook.yml --limit=primary
-```
+---
 
-### Adding a new site
+## 🔗 Cross-References
 
-1. Use the `scripts/create_site_config.sh` script to set up the new site
-2. Update your `.env` file with any site-specific credentials
-3. Follow the deployment process above for the new site
+- [Main README](README.md)
+- [Device Management](README_DEVICES.md)
+- [Proxmox Answer File](docs/PROXMOX_ANSWER_FILE.md)
+- [Submodule Strategy](docs/SUBMODULE_STRATEGY.md)
 
-### Updating existing sites
+---
 
-When you make improvements to the codebase that should apply to all sites:
+## ❓ Troubleshooting
 
-1. Test changes on one site first
-2. After verifying, deploy to other sites as needed
-3. Use the same Terraform and Ansible commands, just changing the site name
+- **Validation errors?** Run `./vendor/proxmox-firewall/validate-config.sh <site_name>` and check the output.
+- **Deployment issues?** See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+- **Need more help?** Open a GitHub issue or join the discussions.
 
-## Environment Variables
+---
 
-For each site, add these to your `.env` file:
-
-```bash
-# Primary Home (primary) Configuration
-PRIMARY_PROXMOX_HOST="10.1.50.1"
-PRIMARY_NETWORK_PREFIX="10.1"
-PRIMARY_DOMAIN="primary.local"
-PRIMARY_HOME_ASSISTANT_MAC="00:11:22:33:44:55"
-PRIMARY_NAS_MAC="aa:bb:cc:dd:ee:ff"
-PRIMARY_NVR_MAC="11:22:33:44:55:66"
-PRIMARY_OMADA_MAC="aa:bb:cc:dd:ee:ff"
-
-# Secondary Home (secondary) Configuration
-SECONDARY_PROXMOX_HOST="10.2.50.1"
-# Add additional variables as needed
-```
-
-## Managing MAC Addresses for DHCP
-
-The system can automatically configure static DHCP mappings for known devices. For each device you want to have a static IP:
-
-1. Add the MAC address to your `.env` file with the format: `SITE_DEVICE_MAC`
-2. The system will automatically map to the appropriate IP based on the VLAN and device configuration
-
-## Tips and Best Practices
-
-1. **Consistent network design**: Use the same VLAN structure across all sites
-2. **Site naming**: Choose short, descriptive names for your sites
-3. **Testing changes**: Test significant changes on one site before deploying to all
-4. **Backing up state**: Regularly back up your Terraform state files
-5. **Git branches**: Use separate branches for site-specific experimental changes
-
-## Troubleshooting
-
-If you encounter issues:
-
-1. **Terraform state mismatch**: If Terraform can't find resources it created, check that you're using the correct state file path
-2. **Missing environment variables**: Ensure all required variables exist in your `.env` file
-3. **Ansible inventory issues**: Verify your hosts.yml file has the correct site groups
-
-## Extending the System
-
-To add support for additional types of devices or VLANs:
-
-1. Update `ansible/group_vars/all.yml` to include the new VLAN or device types
-2. Ensure any templates or tasks that configure these devices are updated
-3. Redeploy to your sites
+> **This guide reflects the recommended, modern workflow. For legacy/manual instructions, see [docs/DEVELOPMENT_INSTALL.md](docs/DEVELOPMENT_INSTALL.md).**

@@ -33,7 +33,7 @@ config/site.conf      group_vars/site.yml      TF_VAR_* environment
 Use the site configuration script to create a new site:
 
 ```bash
-./scripts/create_site_config.sh
+./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
 ```
 
 This creates:
@@ -139,7 +139,7 @@ Deployment state is tracked in `deployment_state/<site_name>.state` for debuggin
 Use the device management script to add network devices to a site:
 
 ```bash
-./scripts/add_device.sh
+./vendor/proxmox-firewall/common/scripts/add_device.sh
 ```
 
 This integrates with the site configuration system to manage DHCP reservations and firewall rules.

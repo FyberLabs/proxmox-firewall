@@ -36,7 +36,7 @@ qm list
 
 ### Prerequisites Installation Fails
 
-**Problem**: `./deployment/scripts/prerequisites.sh` fails with package errors
+**Problem**: `./vendor/proxmox-firewall/deployment/scripts/prerequisites.sh` fails with package errors
 
 **Solution**:
 ```bash

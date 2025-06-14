@@ -128,5 +128,5 @@ fi
 
 echo -e "\n${GREEN}Prerequisites installation completed successfully!${NC}"
 echo -e "${YELLOW}Next steps:${NC}"
-echo -e "1. Run ./deployment/scripts/download_latest_images.sh to download latest images"
-echo -e "2. Run ./deployment/scripts/create_site_config.sh to configure your sites"
+echo -e "1. Run ./vendor/proxmox-firewall/deployment/scripts/download_latest_images.sh to download latest images"
+echo -e "2. Run ./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh to configure your sites"

@@ -69,7 +69,7 @@ The `scripts/add_device.sh` script provides an interactive way to create devices
 ### Usage
 
 ```bash
-./scripts/add_device.sh
+./vendor/proxmox-firewall/common/scripts/add_device.sh
 ```
 
 The script offers the following options:
@@ -113,7 +113,7 @@ The script will:
 ### Example Workflow
 
 ```
-$ ./scripts/add_device.sh
+$ ./vendor/proxmox-firewall/common/scripts/add_device.sh
 
 1. Create a new device from template
 2. List available device templates
@@ -215,7 +215,7 @@ allow_local_network: true
 Use the `scripts/render_template.py` script to generate the final device configuration:
 
 ```bash
-./scripts/render_template.py my_nas.yml -o devices/my_nas.yml
+./vendor/proxmox-firewall/deployment/scripts/render_template.py my_nas.yml -o devices/my_nas.yml
 ```
 
 This will:

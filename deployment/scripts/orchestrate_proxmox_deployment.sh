@@ -45,7 +45,7 @@ create_site_config() {
     print_status "info" "Creating configuration for site: $site_name"
 
     # Run create_site_config.sh with the site name
-    ./scripts/create_site_config.sh "$site_name"
+    ./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh "$site_name"
 
     if [ $? -eq 0 ]; then
         print_status "success" "Site configuration created successfully"
@@ -89,7 +89,7 @@ main() {
     print_status "info" "Deployment preparation completed for site: $site_name"
     print_status "info" "Next steps:"
     print_status "info" "1. Install Proxmox using the generated ISO at output/${site_name}_proxmox.iso"
-    print_status "info" "2. After installation, run: ./scripts/orchestrate_proxmox_deployment.sh $site_name --apply-config"
+    print_status "info" "2. After installation, run: ./vendor/proxmox-firewall/deployment/scripts/orchestrate_proxmox_deployment.sh $site_name --apply-config"
 }
 
 # Check if site name is provided

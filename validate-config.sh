@@ -5,7 +5,7 @@
 # Auto-detect config root
 if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PARENT_REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+    PARENT_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
     export PROXMOX_FW_CONFIG_ROOT="${PARENT_REPO_ROOT}/config"
 fi
 
